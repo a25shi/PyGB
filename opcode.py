@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 import json
+import cartridge
 
 # Operand class
 @dataclass(frozen=True)
@@ -59,3 +60,4 @@ for ninstr in instructions["unprefixed"]:
         Instruction(opcode=ninstr, immediate=instr["immediate"], bytes=instr.get("bytes"), cycles=instr["cycles"],
                     mnemonic=instr["mnemonic"], operands=oplist))
 
+return ()
