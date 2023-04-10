@@ -2,10 +2,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 import json
+import copy
 
 
 # Operand class
-@dataclass(frozen=True)
+@dataclass()
 class Operand:
     immediate: bool
     name: str
@@ -13,8 +14,33 @@ class Operand:
     value: int | None
     adjust: Literal["+", "-"] | None
 
-    def create(self, value):
+    def create(self, value: int):
         return Operand(immediate=self.immediate, name=self.name, bytes=self.bytes, value=value, adjust=self.adjust)
+
+    def setValue(self, value: int):
+        self.value = value
+
+    def copy(self):
+        return copy.copy(self)
+
+    def print(self):
+        if self.adjust is None:
+            adjust = ""
+        else:
+            adjust = self.adjust
+        if self.value is not None:
+            if self.bytes is not None:
+                val = hex(self.value)
+            else:
+                val = self.value
+            v = val
+        else:
+            v = self.name
+        v = v + adjust
+        if self.immediate:
+            return v
+        return f'({v})'
+
 
 
 # Instruction class
@@ -30,6 +56,17 @@ class Instruction:
     def create(self, operands):
         return Instruction(opcode=self.opcode, immediate=self.immediate, operands=operands, cycles=self.cycles,
                            bytes=self.bytes, mnemonic=self.mnemonic)
+
+    def setOperands(self, operands):
+        self.operands = operands
+
+    def copy(self):
+        return copy.copy(self)
+
+    def print(self):
+        ops = ', '.join(op.print() for op in self.operands)
+        s = f"{self.mnemonic:<8} {ops}"
+        return s
 
 
 # Returns unprefixed and cbprefixed opcodes dictionary
