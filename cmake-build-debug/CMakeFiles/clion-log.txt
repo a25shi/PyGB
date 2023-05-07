@@ -1,1 +1,1 @@
-CMakeLists.txt not found in C:\Users\allen\CLionProjects\untitled70 Select CMakeLists.txt
+CMakeLists.txt not found in C:\Users\allen\CLionProjects\PyGB Select CMakeLists.txt
