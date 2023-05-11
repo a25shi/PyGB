@@ -60,13 +60,17 @@ class Instruction:
     def setOperands(self, operands):
         self.operands = operands
 
+    def getOperands(self):
+        return self.operands
+
     def copy(self):
         return copy.copy(self)
 
     def print(self):
         ops = ', '.join(op.print() for op in self.operands)
-        s = f"{self.mnemonic:<8} {ops}"
+        s = f"{self.opcode} {self.mnemonic:<8} {ops}"
         return s
+
 
 
 # Returns unprefixed and cbprefixed opcodes dictionary

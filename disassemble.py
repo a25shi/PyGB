@@ -5,7 +5,7 @@ import opcodes
 
 @dataclass
 class Decoder:
-    # memory banks
+    # game data
     memory: bytes
     # program counter
     address: int
@@ -13,10 +13,10 @@ class Decoder:
     unprefixed: dict
     cbprefixed: dict
 
-    @classmethod
-    def create(cls, opcodefile: str, memory: bytes, address: int = 0):
-        unprefixed, cbprefixed = opcodes.getOpcodes(opcodefile)
-        return cls(unprefixed=unprefixed, cbprefixed=cbprefixed, memory=memory, address=address)
+    def __init__(self, opcodefile: str, memory: bytes, address: int = 0):
+        self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
+        self.memory = memory
+        self.address = address
 
     # read counter num of bytes from address
     def read(self, address: int, counter: int = 1):
@@ -64,6 +64,9 @@ class Decoder:
         ret_instr = instruction.copy()
         ret_instr.setOperands(oparr)
         return address, ret_instr
+
+    def getSize(self):
+        return len(self.memory)
 
 
 def disassemble(decoder: Decoder, address: int, count: int):
