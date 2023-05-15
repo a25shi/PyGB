@@ -42,7 +42,6 @@ class Operand:
         return f'({v})'
 
 
-
 # Instruction class
 @dataclass
 class Instruction:
@@ -70,7 +69,6 @@ class Instruction:
         ops = ', '.join(op.print() for op in self.operands)
         s = f"{self.opcode} {self.mnemonic:<8} {ops}"
         return s
-
 
 
 # Returns unprefixed and cbprefixed opcodes dictionary

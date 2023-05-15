@@ -1,8 +1,12 @@
+import sys
+
+
 class Memory:
 
-    def __init__(self):
+    def __init__(self, cartridge):
         self.ram = [0] * 8192  # 8kB
         self.hram = [0] * 127  # idk
+        self.cartridge = cartridge
 
     def set(self, address, value):
         if address < 0:
@@ -28,7 +32,6 @@ class Memory:
             pass
         elif address == 0xFF00:
             pass
-            return
         elif 0xFF01 <= address <= 0xFF02:
             # Serial transfer IO registers
             pass
@@ -63,15 +66,17 @@ class Memory:
         else:
             raise ValueError(f"Disallowed write ({value}) to {hex(address)}")
 
-    def get(self, address):
+    def get(self, address: int, counter: int = 1):
         if address < 0x8000:
             # Cartridge ROM or memory bank
-            pass
+            data = self.cartridge[address: address + counter]
+            return int.from_bytes(data, sys.byteorder)
         elif address < 0xA000:
             pass
         elif address < 0xC000:
             # Switchable RAM bank
-            pass
+            data = self.cartridge[address - 0xC000: address + counter - 0xC000]
+            return int.from_bytes(data, sys.byteorder)
         elif address < 0xE000:
             # info("Read from internal RAM")
             return self.ram[address - 0xC000]

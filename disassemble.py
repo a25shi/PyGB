@@ -1,42 +1,42 @@
 import sys
 from dataclasses import dataclass
 import opcodes
+from memory import Memory
+from pathlib import Path
 
 
 @dataclass
 class Decoder:
     # game data
-    memory: bytes
+    memory: Memory
     # program counter
     address: int
     # instructions
     unprefixed: dict
     cbprefixed: dict
 
-    def __init__(self, opcodefile: str, memory: bytes, address: int = 0):
+    def __init__(self, opcodefile: str, filename: str, address: int = 0):
         self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
-        self.memory = memory
+        self.memory = Memory(Path(filename).read_bytes())
         self.address = address
 
-    # read counter num of bytes from address
-    def read(self, address: int, counter: int = 1):
-        if 0 <= address + counter <= len(self.memory):
-            # get bytes in memory from address to address + counter
-            data = self.memory[address: address + counter]
-            # get int representation of bytes, with edian using system byteorder
-            return int.from_bytes(data, sys.byteorder)
-        else:
-            raise IndexError(f'{address=}+{counter=} is out of range')
+    # get bytes from memory
+    def get(self, address: int, counter: int = 1):
+        return self.memory.get(address, counter)
+
+    # set bytes at memory
+    def set(self, address: int, value: int):
+        self.memory.set(address, value)
 
     # decodes instruction at address
     def decode(self, address: int):
         # opcode = item at pc
-        opcode = self.read(address)
+        opcode = self.get(address)
         # iterate pc
         address += 1
         # if prefixed opcode, read next item and get cb instruction
         if opcode == 0xCB:
-            opcode = self.read(address)
+            opcode = self.get(address)
             address += 1
             instruction = self.cbprefixed[opcode]
         # if not, get instruction normally
@@ -51,7 +51,7 @@ class Decoder:
             # if bytes its a memory address, and read the bytes
             if operand.bytes is not None:
                 # read memory value
-                val = self.read(address, operand.bytes)
+                val = self.get(address, operand.bytes)
                 address += operand.bytes
                 # create operand copy with value stored
                 newop = operand.copy()
@@ -64,9 +64,6 @@ class Decoder:
         ret_instr = instruction.copy()
         ret_instr.setOperands(oparr)
         return address, ret_instr
-
-    def getSize(self):
-        return len(self.memory)
 
 
 def disassemble(decoder: Decoder, address: int, count: int):
