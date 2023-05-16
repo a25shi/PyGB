@@ -43,7 +43,7 @@ class Registers(MutableMapping):
         elif key in REGISTERS_LOW:
             register = REGISTERS_LOW[key]
             current_value = self[register]
-            setattr(self, register, (current_value & 0xFF00 | value) & 0xFFFF)
+            setattr(self, register, (current_value & 0xFF00 | value & 0x00FF) & 0xFFFF)
         elif key in FLAGS:
             assert value in (0, 1), f"{value} must be 0 or 1"
             flag_bit = FLAGS[key]
@@ -123,6 +123,22 @@ class CPU:
     def LD(self, operand1: Operand, operand2: Operand):
         ret = self.getVal(operand2)
         self.setVal(operand1, ret)
+
+    def RET(self):
+        sp = self.registers.__getitem__("SP")
+        pc = self.decoder.get((sp + 1) & 0xFFFF) << 8
+        pc |= self.decoder.get(sp)
+        self.registers.__setitem__("PC", pc)
+        sp += 2
+        self.registers.__setitem__("SP", sp)
+
+    def CALL(self, val):
+        sp = self.registers.__getitem__("SP")
+        pc = self.registers.__getitem__("PC")
+        self.decoder.set((sp - 1) & 0xFFFF, pc >> 8)
+        self.decoder.set((sp - 2) & 0xFFFF, pc & 0xFF)
+        self.registers.__setitem__("PC", val)
+        self.registers.__setitem__("SP", sp - 2)
 
     def execute(self, instruction: Instruction):
         # I'm using 3.10's pattern matching, but you can use a
@@ -224,9 +240,9 @@ class CPU:
             case Instruction(mnemonic="SUB"):
                 operands = instruction.getOperands()
 
-                val = self.getVal(operands[0])
-                res = self.getVal(operands[1])
-                self.setVal(operands[0], val - res)
+                val = self.registers.__getitem__("A")
+                res = self.getVal(operands[0])
+                self.registers.__setitem__("A", val - res)
 
                 # Flags
                 self.registers.__setitem__("z", (val - res) & 0xFF == 0)
@@ -251,10 +267,10 @@ class CPU:
 
             case Instruction(mnemonic="AND"):
                 operands = instruction.getOperands()
-                val = self.getVal(operands[0])
-                res = self.getVal(operands[1])
 
-                self.setVal(operands[0], val & res)
+                val = self.registers.__getitem__("A")
+                res = self.getVal(operands[0])
+                self.registers.__setitem__("A", val & res)
 
                 # Flags
                 self.registers.__setitem__("z", (val & res) == 0)
@@ -264,10 +280,10 @@ class CPU:
 
             case Instruction(mnemonic="XOR"):
                 operands = instruction.getOperands()
-                val = self.getVal(operands[0])
-                res = self.getVal(operands[1])
 
-                self.setVal(operands[0], val ^ res)
+                val = self.registers.__getitem__("A")
+                res = self.getVal(operands[0])
+                self.registers.__setitem__("A", val ^ res)
 
                 # Flags
                 self.registers.__setitem__("z", ((val ^ res) & 0xFF) == 0)
@@ -277,10 +293,10 @@ class CPU:
 
             case Instruction(mnemonic="OR"):
                 operands = instruction.getOperands()
-                val = self.getVal(operands[0])
-                res = self.getVal(operands[1])
 
-                self.setVal(operands[0], val | res)
+                val = self.registers.__getitem__("A")
+                res = self.getVal(operands[0])
+                self.registers.__setitem__("A", val | res)
 
                 # Flags
                 self.registers.__setitem__("z", ((val | res) & 0xFF) == 0)
@@ -290,8 +306,9 @@ class CPU:
 
             case Instruction(mnemonic="CP"):
                 operands = instruction.getOperands()
-                val = self.getVal(operands[0])
-                res = self.getVal(operands[1])
+
+                val = self.registers.__getitem__("A")
+                res = self.getVal(operands[0])
 
                 # Flags
                 self.registers.__setitem__("z", val == res)
@@ -320,9 +337,340 @@ class CPU:
                 self.registers.__setitem__("h", (val & 0xF) - 1 < 0xF)
 
             case Instruction(mnemonic="DAA"):
-                pass
+                a = self.registers.__getitem__("A")
+                n = self.registers.__getitem__("n")
+                c = self.registers.__getitem__("c")
+                h = self.registers.__getitem__("h")
+
+                if not n:
+                    if c or a > 0x99:
+                        a += 0x60
+                        self.registers.__setitem__("c", 1)
+                    if h or (a & 0x0f) > 0x09:
+                        a += 0x6
+                else:
+                    if c:
+                        a -= 0x60
+                    if h:
+                        a -= 0x6
+
+                self.registers.__setitem__("A", a)
+                self.registers.__setitem__("z", a == 0)
+                self.registers.__setitem__("h", 0)
+
             case Instruction(mnemonic="CPL"):
+                self.registers.__setitem__("A", ~self.registers.__getitem__("A"))
+                self.registers.__setitem__("n", 1)
+                self.registers.__setitem__("h", 1)
+
+            case Instruction(mnemonic="RLCA"):
+                a = self.registers.__getitem__("A")
+                val = (a << 1) + (a >> 7)
+
+                # Flags
+                self.registers.__setitem__("z", 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.registers.__setitem__("A", val)
+
+            case Instruction(mnemonic="RLA"):
+                a = self.registers.__getitem__("A")
+                c = self.registers.__getitem__("c")
+                val = (a << 1) + c
+
+                # Flags
+                self.registers.__setitem__("z", 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.registers.__setitem__("A", val)
+
+            case Instruction(mnemonic="RRCA"):
+                a = self.registers.__getitem__("A")
+
+                val = (a >> 1) + ((a & 1) << 7) + ((a & 1) << 8)
+
+                # Flags
+                self.registers.__setitem__("z", 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.registers.__setitem__("A", val)
+
+            case Instruction(mnemonic="RRA"):
+                a = self.registers.__getitem__("A")
+                c = self.registers.__getitem__("c")
+                val = (a >> 1) + (c << 7) + ((a & 1) << 8)
+
+                # Flags
+                self.registers.__setitem__("z", 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.registers.__setitem__("A", val)
+
+            case Instruction(mnemonic="RLC"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                val = (reg << 1) + (reg >> 7)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="RL"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                c = self.registers.__getitem__("c")
+                val = (reg << 1) + c
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="RRC"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+
+                val = (reg >> 1) + ((reg & 1) << 7) + ((reg & 1) << 8)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="RR"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                c = self.registers.__getitem__("c")
+                val = (reg >> 1) + (c << 7) + ((reg & 1) << 8)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="SLA"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                val = reg << 1
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="SWAP"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                val = ((reg & 0xF0) >> 4) | ((reg & 0x0F) << 4)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", 0)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="SRA"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                val = ((reg >> 1) | (reg & 0x80)) + ((reg & 1) << 8)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="SRL"):
+                operand = instruction.getOperands()
+                reg = self.getVal(operand[0])
+                val = (reg >> 1) + ((reg & 1) << 8)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", val > 0xFF)
+
+                # Set
+                val &= 0xFF
+                self.setVal(operand[0], val)
+
+            case Instruction(mnemonic="BIT"):
+                operands = instruction.getOperands()
+                shift = self.getVal(operands[0])
+                reg = self.getVal(operands[1])
+                val = reg & (1 << shift)
+
+                # Flags
+                self.registers.__setitem__("z", (val & 0xFF) == 0)
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 1)
+
+            case Instruction(mnemonic="SET"):
+                operands = instruction.getOperands()
+                shift = self.getVal(operands[0])
+                reg = self.getVal(operands[1])
+                val = reg | (1 << shift)
+                self.setVal(operands[1], val)
+
+            case Instruction(mnemonic="RES"):
+                operands = instruction.getOperands()
+                shift = self.getVal(operands[0])
+                reg = self.getVal(operands[1])
+                val = reg & ~(1 << shift)
+                self.setVal(operands[1], val)
+
+            case Instruction(mnemonic="CCF"):
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", not self.registers.__getitem__("c"))
+
+            case Instruction(mnemonic="SCF"):
+                self.registers.__setitem__("n", 0)
+                self.registers.__setitem__("h", 0)
+                self.registers.__setitem__("c", 1)
+
+            case Instruction(mnemonic="HALT"):
                 pass
+
+            case Instruction(mnemonic="STOP"):
+                pass
+
+            case Instruction(mnemonic="DI"):
+                pass
+
+            case Instruction(mnemonic="EI"):
+                pass
+
+            case Instruction(mnemonic="JP"):
+                operands = instruction.getOperands()
+
+                if len(operands) == 1:
+                    val = self.getVal(operands[0])
+                    self.registers.__setitem__("PC", val)
+                else:
+                    condition = operands[0].name
+                    val = self.getVal(operands[1])
+                    if condition == "C" and self.registers.__getitem__("c"):
+                        self.registers.__setitem__("PC", val)
+                    elif condition == "NC" and not self.registers.__getitem__("c"):
+                        self.registers.__setitem__("PC", val)
+                    elif condition == "Z" and self.registers.__getitem__("z"):
+                        self.registers.__setitem__("PC", val)
+                    elif condition == "NZ" and not self.registers.__getitem__("z"):
+                        self.registers.__setitem__("PC", val)
+
+            case Instruction(mnemonic="JR"):
+                operands = instruction.getOperands()
+
+                if len(operands) == 1:
+                    val = self.getVal(operands[0])
+                    pc = self.registers.__getitem__("PC")
+                    pc += ((val ^ 0x80) - 0x80)
+                    self.registers.__setitem__("PC", pc)
+                else:
+                    condition = operands[0].name
+                    val = self.getVal(operands[1])
+                    pc = self.registers.__getitem__("PC")
+                    pc += ((val ^ 0x80) - 0x80)
+                    if condition == "C" and self.registers.__getitem__("c"):
+                        self.registers.__setitem__("PC", pc)
+                    elif condition == "NC" and not self.registers.__getitem__("c"):
+                        self.registers.__setitem__("PC", pc)
+                    elif condition == "Z" and self.registers.__getitem__("z"):
+                        self.registers.__setitem__("PC", pc)
+                    elif condition == "NZ" and not self.registers.__getitem__("z"):
+                        self.registers.__setitem__("PC", pc)
+
+            case Instruction(mnemonic="CALL"):
+                operands = instruction.getOperands()
+                if len(operands) == 1:
+                    val = self.getVal(operands[0])
+                    self.CALL(val)
+                else:
+                    condition = operands[0].name
+                    val = self.getVal(operands[1])
+                    if condition == "C" and self.registers.__getitem__("c"):
+                        self.CALL(val)
+                    elif condition == "NC" and not self.registers.__getitem__("c"):
+                        self.CALL(val)
+                    elif condition == "Z" and self.registers.__getitem__("z"):
+                        self.CALL(val)
+                    elif condition == "NZ" and not self.registers.__getitem__("z"):
+                        self.CALL(val)
+
+            case Instruction(mnemonic="RET"):
+                operand = instruction.getOperands()
+                if len(operand):
+                    condition = operand[0].name
+                    if condition == "C" and self.registers.__getitem__("c"):
+                        self.RET()
+                    elif condition == "NC" and not self.registers.__getitem__("c"):
+                        self.RET()
+                    elif condition == "Z" and self.registers.__getitem__("z"):
+                        self.RET()
+                    elif condition == "NZ" and not self.registers.__getitem__("z"):
+                        self.RET()
+                else:
+                    self.RET()
+
+            case Instruction(mnemonic="RETI"):
+                pass
+
+            case Instruction(mnemonic="RST"):
+                operands = instruction.getOperands()
+                val = self.getVal(operands[0])
+                self.CALL(val)
 
             case _:
                 raise InstructionError(f"Cannot execute {instruction}")
