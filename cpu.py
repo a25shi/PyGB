@@ -11,10 +11,8 @@ REGISTERS_HIGH = {"A": "AF", "B": "BC", "D": "DE", "H": "HL"}
 REGISTERS = {"AF", "BC", "DE", "HL", "PC", "SP"}
 FLAGS = {"c": 4, "h": 5, "n": 6, "z": 7}
 
-
 class InstructionError(Exception):
     pass
-
 
 # Registers
 @dataclass
@@ -141,9 +139,6 @@ class CPU:
         self.registers.__setitem__("SP", sp - 2)
 
     def execute(self, instruction: Instruction):
-        # I'm using 3.10's pattern matching, but you can use a
-        # dictionary to dispatch to functions instead, or a series of
-        # if statements.
         match instruction:
             case Instruction(mnemonic="NOP"):
                 pass
@@ -669,7 +664,7 @@ class CPU:
 
             case Instruction(mnemonic="RST"):
                 operands = instruction.getOperands()
-                val = self.getVal(operands[0])
+                val = operands[0].name
                 self.CALL(val)
 
             case _:
@@ -680,7 +675,9 @@ class CPU:
             address = self.registers["PC"]
             try:
                 next_address, instruction = self.decoder.decode(address)
+                print(instruction)
             except IndexError:
                 break
             self.registers["PC"] = next_address
             self.execute(instruction)
+

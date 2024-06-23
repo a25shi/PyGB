@@ -66,7 +66,7 @@ class Decoder:
         return address, ret_instr
 
 
-def disassemble(decoder: Decoder, address: int, count: int):
+def disassemble(decoder: Decoder, address, count: int):
     for _ in range(count):
         try:
             new_address, instruction = decoder.decode(address)

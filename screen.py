@@ -3,7 +3,6 @@ class Screen:
         self.VRAM = [0] * 8192
         self.OAM = [0] * 0xA0
         self.LCDC = 0
-        self.LCDC = 0  # LCD control register
         self.STAT = 0  # LCDC status
         self.SCY = 0  # BG scroll y
         self.SCX = 0  # BG scroll x
