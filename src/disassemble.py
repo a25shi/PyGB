@@ -1,6 +1,6 @@
-import sys
 from dataclasses import dataclass
 import opcodes
+from cartridge import CartridgeMetadata
 from memory import Memory
 from pathlib import Path
 
@@ -15,9 +15,9 @@ class Decoder:
     unprefixed: dict
     cbprefixed: dict
 
-    def __init__(self, opcodefile: str, filename: str, address: int = 0):
+    def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address: int = 0,):
         self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
-        self.memory = Memory(Path(filename).read_bytes())
+        self.memory = Memory(Path(filename).read_bytes(), metadata.cartridge_type, cpu)
         self.address = address
 
     # get bytes from memory

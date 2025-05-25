@@ -1,9 +1,9 @@
 from collections.abc import MutableMapping
 from dataclasses import dataclass
+
 from disassemble import Decoder
 from opcodes import Instruction, Operand
-from memory import Memory
-from pathlib import Path
+from timer import Timer
 
 # Constants
 REGISTERS_LOW = {"F": "AF", "C": "BC", "E": "DE", "L": "HL"}
@@ -11,8 +11,10 @@ REGISTERS_HIGH = {"A": "AF", "B": "BC", "D": "DE", "H": "HL"}
 REGISTERS = {"AF", "BC", "DE", "HL", "PC", "SP"}
 FLAGS = {"c": 4, "h": 5, "n": 6, "z": 7}
 
+
 class InstructionError(Exception):
     pass
+
 
 # Registers
 @dataclass
@@ -81,9 +83,14 @@ class Registers(MutableMapping):
 
 class CPU:
 
-    def __init__(self, filename):
+    def __init__(self, filename, metadata):
         self.registers = Registers(AF=0, BC=0, DE=0, HL=0, PC=0, SP=0)
-        self.decoder = Decoder('Opcodes.json', filename, address=0)
+        self.decoder = Decoder('Opcodes.json', filename, metadata, address=0, cpu=self)
+        self.maxcycles = 69905  # CPU clocks per second (4194304) / fixed number of frames we want
+        self.i_master = 0
+        self.i_enable = 0
+        self.i_flag = 0
+        self.timer = Timer()
 
     def getVal(self, operand: Operand):
         # Op is a register
@@ -560,7 +567,7 @@ class CPU:
 
             case Instruction(mnemonic="RES"):
                 operands = instruction.getOperands()
-                shift = self.getVal(operands[0])
+                shift = int(operands[0].name)
                 reg = self.getVal(operands[1])
                 val = reg & ~(1 << shift)
                 self.setVal(operands[1], val)
@@ -665,19 +672,75 @@ class CPU:
             case Instruction(mnemonic="RST"):
                 operands = instruction.getOperands()
                 val = operands[0].name
+                val = int(val.rstrip('H'), 16)
                 self.CALL(val)
 
             case _:
                 raise InstructionError(f"Cannot execute {instruction}")
 
+        return instruction.cycles[0]
+
     def run(self):
         while True:
-            address = self.registers["PC"]
-            try:
-                next_address, instruction = self.decoder.decode(address)
-                print(instruction)
-            except IndexError:
-                break
-            self.registers["PC"] = next_address
-            self.execute(instruction)
+            cycles = self.executeNextOp()
 
+    def update(self):
+        c_cycles = 0
+        while c_cycles < self.maxcycles:
+            # execute
+            cycles = self.executeNextOp()
+            c_cycles += cycles
+
+            # tick timer
+            timer_inter = self.timer.tick(cycles)
+            if timer_inter:
+                self.setInterrupt(2)
+
+            # check interrupts
+            self.checkInterrupt()
+
+    def executeNextOp(self):
+        address = self.registers["PC"]
+        try:
+            next_address, instruction = self.decoder.decode(address)
+            print(f'{address:>04X} {instruction.print()}')
+        except IndexError:
+            raise InstructionError(f"Cannot execute on {address}")
+        self.registers["PC"] = next_address
+        cycles = self.execute(instruction)
+        return cycles
+
+    def setInterrupt(self, bit):
+        flag = 1 << bit
+        self.i_flag |= flag
+
+    def checkInterrupt(self):
+        total = (self.i_enable & 0b11111) & (self.i_flag & 0b11111)
+        if total:
+            # interrupt master check
+            if self.i_master:
+                # V_BLANK
+                if total & 0b1:
+                    self.handleInterrupt(0b1, 0x40)
+                # LCD
+                elif total & 0b10:
+                    self.handleInterrupt(0b10, 0x48)
+                # TIMER
+                elif total & 0b100:
+                    self.handleInterrupt(0b100, 0x50)
+                # SERIAL
+                elif total & 0b1000:
+                    self.handleInterrupt(0b1000, 0x58)
+                # JOYPAD
+                elif total & 0b10000:
+                    self.handleInterrupt(0b10000, 0x60)
+
+    def handleInterrupt(self, flag, address):
+        self.i_flag ^= flag  # remove flag
+
+        self.decoder.set(self.registers["SP"] - 1, self.registers["PC"] >> 8)
+        self.decoder.set(self.registers["SP"] - 2, self.registers["PC"] & 0xFF)
+        self.registers["SP"] -= 2
+
+        self.registers["PC"] = address
+        self.i_master = False
