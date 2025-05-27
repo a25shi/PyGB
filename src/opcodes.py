@@ -97,8 +97,13 @@ def getOpcodes(filename):
         instr = instructions["unprefixed"][ninstr]
         oplist = []
         for op in instr["operands"]:
+            adjust = None
+            if op.get("increment"):
+                adjust = "+"
+            elif op.get("decrement"):
+                adjust = "-"
             operation = Operand(immediate=op["immediate"], name=op["name"], bytes=op.get("bytes"), value=None,
-                                adjust=None)
+                                adjust=adjust)
             oplist.append(operation)
         unprefixed.append(
             Instruction(opcode=ninstr, immediate=instr["immediate"], bytes=instr.get("bytes"), cycles=instr["cycles"],

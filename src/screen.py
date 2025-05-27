@@ -16,8 +16,7 @@ class Screen:
         self.cpu = cpu
 
     def update(self, cycles):
-        # TODO: add lcd update
-
+        self.updateLCD()
         if self.LCDC.lcd_enable:
             self.scan_counter -= cycles
         else:
@@ -39,6 +38,54 @@ class Screen:
             elif self.LY < 144:
                 # TODO: add scanline render
                 pass
+
+    def updateLCD(self):
+        # reset if not enabled
+        if not self.LCDC.lcd_enable:
+            self.scan_counter = 456
+            self.LY = 0
+            self.STAT.set_mode(1)
+            return
+
+        mode2bounds = 376
+        mode3bounds = 204
+        interrupt = False
+        prevmode = self.STAT.value & 0b11
+        newmode = 0
+
+        # mode 1
+        if self.LY >= 144:
+            newmode = 1
+            self.STAT.set_mode(1)
+            interrupt = self.STAT.value & (1 << 4)
+
+        # mode 2
+        elif self.scan_counter >= mode2bounds:
+            newmode = 2
+            self.STAT.set_mode(2)
+            interrupt = self.STAT.value & (1 << 5)
+
+        # mode 3
+        elif self.scan_counter >= mode3bounds:
+            newmode = 3
+            self.STAT.set_mode(3)
+
+        # mode 0
+        else:
+            newmode = 0
+            self.STAT.set_mode(0)
+            interrupt = self.STAT.value & (1 << 3)
+
+        # new mode interrupt
+        if interrupt & (prevmode != newmode):
+            self.cpu.setInterrupt(1)
+
+        # check coincidence flag
+        interrupt = self.STAT.update_LYC(self.LYC, self.LY)
+        if interrupt:
+            self.cpu.setInterrupt(1)
+
+
 class STATRegister:
     def __init__(self):
         self.value = 0b1000_0000

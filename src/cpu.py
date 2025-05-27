@@ -1,9 +1,10 @@
+import sys
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-
 from disassemble import Decoder
 from opcodes import Instruction, Operand
 from timer import Timer
+from screen import Screen
 
 # Constants
 REGISTERS_LOW = {"F": "AF", "C": "BC", "E": "DE", "L": "HL"}
@@ -91,6 +92,8 @@ class CPU:
         self.i_enable = 0
         self.i_flag = 0
         self.timer = Timer()
+        self.screen = Screen(self)
+        self.blargg = ""
 
     def getVal(self, operand: Operand):
         # Op is a register
@@ -146,23 +149,81 @@ class CPU:
         self.registers.__setitem__("SP", sp - 2)
 
     def execute(self, instruction: Instruction):
+
         match instruction:
             case Instruction(mnemonic="NOP"):
                 pass
+
             case Instruction(mnemonic="LD"):
                 operands = instruction.getOperands()
+
+                # special case LD (C),A
+                if instruction.opcode == "0xE2":
+                    # (C)
+                    ptr = self.registers["C"]
+                    a = self.registers["A"]
+                    # (C + 0xFF00) = A
+                    self.decoder.set(ptr + 0xFF00, a)
+                    return instruction.cycles[0]
+
+                # special case LD A, (C)
+                elif instruction.opcode == "0xF2":
+                    # (C)
+                    ptr = self.registers["C"]
+                    item = self.decoder.get(ptr + 0xFF00)
+                    # A = (C + 0xFF00)
+                    self.registers["A"] = item
+                    return instruction.cycles[0]
+                # special case LD HL,SP+r8
+                elif instruction.opcode == "0xF8":
+                    res = self.getVal(operands[2])
+                    val = self.registers["SP"]
+
+                    # HL = SP + r8
+                    self.registers["HL"] = val + ((res ^ 0x80) - 0x80)
+
+                    # Flags
+                    self.registers.__setitem__("h", (val & 0xF) + (res & 0xF) > 0xF)
+                    self.registers.__setitem__("c", (val & 0xFF) + (res & 0xFF) > 0xFF)
+                    return instruction.cycles[0]
+
                 self.LD(operands[0], operands[1])
+                # check for inc or dec
+                if operands[0].adjust:
+                    if operands[0].adjust == "+":
+                        self.registers["HL"] += 1
+                    else:
+                        self.registers["HL"] -= 1
+
+                elif operands[1].adjust:
+                    if operands[1].adjust == "+":
+                        self.registers["HL"] += 1
+                    else:
+                        self.registers["HL"] -= 1
+
             case Instruction(mnemonic="LDH"):
                 operands = instruction.getOperands()
+
+                # special case LDH A,(a8)
+                if instruction.opcode == "0xF0":
+                    # (a8)
+                    ptr = operands[1].value
+                    item = self.decoder.get(ptr + 0xFF00)
+                    # A = (a8 + ff00)
+                    self.registers["A"] = item
+                    return instruction.cycles[0]
+
+                # special case LDH (a8), A
+                elif instruction.opcode == "0xE0":
+                    # (a8)
+                    ptr = operands[0].value
+                    a = self.registers["A"]
+                    # (a8 + 0xFF00) = A
+                    self.decoder.set(ptr + 0xFF00, a)
+                    return instruction.cycles[0]
+
                 self.LD(operands[0], operands[1])
-            case Instruction(mnemonic="LDI"):
-                operands = instruction.getOperands()
-                self.LD(operands[0], operands[1])
-                self.registers["HL"] += 1
-            case Instruction(mnemonic="LDD"):
-                operands = instruction.getOperands()
-                self.LD(operands[0], operands[1])
-                self.registers["HL"] -= 1
+
             case Instruction(mnemonic="PUSH"):
                 operand = instruction.getOperands()
                 val = self.registers[operand[0].name]
@@ -188,7 +249,7 @@ class CPU:
                 if operands[0].name == "HL":
                     self.registers.__setitem__("n", 0)
                     self.registers.__setitem__("h", (val & 0xFFF) + (res & 0xFFF) > 0xFFF)
-                    self.registers.__setitem__("c", (val + res) > 0xFFFF)
+                    self.registers.__setitem__("c", (val & 0xFF) + (res & 0xFF) > 0xFFFF)
 
                     # Set register value
                     self.registers.__setitem__(operands[0].name, val + res)
@@ -197,12 +258,10 @@ class CPU:
                 elif operands[0].name == "SP":
                     self.registers.__setitem__("z", 0)
                     self.registers.__setitem__("n", 0)
-                    if res >= 0:
-                        self.registers.__setitem__("h", (val & 0xF) + (res & 0xF) > 0xF)
-                        self.registers.__setitem__("c", (val + res) > 0xFF)
-                    else:
-                        self.registers.__setitem__("h", ((val + res) & 0xF) <= (val & 0xF))
-                        self.registers.__setitem__("c", ((val + res) & 0xFF) <= (val & 0xFF))
+
+                    self.registers.__setitem__("h", (val & 0xF) + (res & 0xF) > 0xF)
+                    self.registers.__setitem__("c", (val & 0xFF) + (res & 0xFF) > 0xFF)
+
                     # Set register value
                     t = val + ((res ^ 0x80) - 0x80)
                     t &= 0xFFFF
@@ -213,7 +272,7 @@ class CPU:
                     self.registers.__setitem__("z", (val + res) & 0xFF == 0)
                     self.registers.__setitem__("n", 0)
                     self.registers.__setitem__("h", (val & 0xF) + (res & 0xF) > 0xF)
-                    self.registers.__setitem__("c", (val + res) > 0xFF)
+                    self.registers.__setitem__("c", (val & 0xFF) + (res & 0xFF) > 0xFF)
 
                     # Set register value
                     self.registers.__setitem__(operands[0].name, val + res)
@@ -237,7 +296,7 @@ class CPU:
                 self.registers.__setitem__("z", (val + res + carry) & 0xFF == 0)
                 self.registers.__setitem__("n", 0)
                 self.registers.__setitem__("h", ((val & 0xF) + (res & 0xF) + carry) > 0xF)
-                self.registers.__setitem__("c", (val + res + carry) > 0xFF)
+                self.registers.__setitem__("c", (val & 0xFF) + (res & 0xFF) + (carry & 0xFF) > 0xFF)
 
             case Instruction(mnemonic="SUB"):
                 operands = instruction.getOperands()
@@ -250,7 +309,7 @@ class CPU:
                 self.registers.__setitem__("z", (val - res) & 0xFF == 0)
                 self.registers.__setitem__("n", 1)
                 self.registers.__setitem__("h", (val & 0xF) - (res & 0xF) < 0)
-                self.registers.__setitem__("c", val - res < 0)
+                self.registers.__setitem__("c", (val & 0xFF) - (res & 0xFF) < 0)
 
             case Instruction(mnemonic="SBC"):
                 operands = instruction.getOperands()
@@ -265,7 +324,7 @@ class CPU:
                 self.registers.__setitem__("z", (val - res - carry) & 0xFF == 0)
                 self.registers.__setitem__("n", 1)
                 self.registers.__setitem__("h", (val & 0xF) - (res & 0xF) - carry < 0)
-                self.registers.__setitem__("c", val - res - carry < 0)
+                self.registers.__setitem__("c", (val & 0xFF) - (res & 0xFF) - (carry & 0xFF) < 0)
 
             case Instruction(mnemonic="AND"):
                 operands = instruction.getOperands()
@@ -322,11 +381,11 @@ class CPU:
                 operand = instruction.getOperands()
                 val = self.getVal(operand[0])
                 self.setVal(operand[0], val + 1)
-
                 # Flags
-                self.registers.__setitem__("z", (val + 1) & 0xFF == 0)
-                self.registers.__setitem__("n", 0)
-                self.registers.__setitem__("h", (val & 0xF) + 1 > 0xF)
+                if instruction.opcode not in ["0x03", "0x13", "0x23", "0x33"]:
+                    self.registers.__setitem__("z", (val + 1) & 0xFF == 0)
+                    self.registers.__setitem__("n", 0)
+                    self.registers.__setitem__("h", (val & 0xF) + 1 > 0xF)
 
             case Instruction(mnemonic="DEC"):
                 operand = instruction.getOperands()
@@ -334,9 +393,11 @@ class CPU:
                 self.setVal(operand[0], val - 1)
 
                 # Flags
-                self.registers.__setitem__("z", val - 1 == 0)
-                self.registers.__setitem__("n", 1)
-                self.registers.__setitem__("h", (val & 0xF) - 1 < 0xF)
+                if instruction.opcode not in ["0x0B", "0x1B", "0x2B", "0x3B"]:
+                    self.registers.__setitem__("z", val - 1 == 0)
+                    self.registers.__setitem__("n", 1)
+                    self.registers.__setitem__("h", ((val & 0xF) - (1 & 0xF)) < 0)
+
 
             case Instruction(mnemonic="DAA"):
                 a = self.registers.__getitem__("A")
@@ -583,23 +644,26 @@ class CPU:
                 self.registers.__setitem__("c", 1)
 
             case Instruction(mnemonic="HALT"):
-                pass
+                raise InstructionError(f"Cannot execute {instruction}")
 
             case Instruction(mnemonic="STOP"):
-                pass
+                raise InstructionError(f"Cannot execute {instruction}")
 
             case Instruction(mnemonic="DI"):
-                pass
+                self.i_master = False
 
             case Instruction(mnemonic="EI"):
-                pass
+                self.i_master = True
 
             case Instruction(mnemonic="JP"):
                 operands = instruction.getOperands()
 
+                # unconditional
                 if len(operands) == 1:
                     val = self.getVal(operands[0])
                     self.registers.__setitem__("PC", val)
+
+                # conditional
                 else:
                     condition = operands[0].name
                     val = self.getVal(operands[1])
@@ -611,15 +675,20 @@ class CPU:
                         self.registers.__setitem__("PC", val)
                     elif condition == "NZ" and not self.registers.__getitem__("z"):
                         self.registers.__setitem__("PC", val)
+                    else:
+                        return instruction.cycles[1]
 
             case Instruction(mnemonic="JR"):
                 operands = instruction.getOperands()
 
+                # unconditional
                 if len(operands) == 1:
                     val = self.getVal(operands[0])
                     pc = self.registers.__getitem__("PC")
                     pc += ((val ^ 0x80) - 0x80)
                     self.registers.__setitem__("PC", pc)
+
+                # conditional
                 else:
                     condition = operands[0].name
                     val = self.getVal(operands[1])
@@ -633,6 +702,8 @@ class CPU:
                         self.registers.__setitem__("PC", pc)
                     elif condition == "NZ" and not self.registers.__getitem__("z"):
                         self.registers.__setitem__("PC", pc)
+                    else:
+                        return instruction.cycles[1]
 
             case Instruction(mnemonic="CALL"):
                 operands = instruction.getOperands()
@@ -650,6 +721,8 @@ class CPU:
                         self.CALL(val)
                     elif condition == "NZ" and not self.registers.__getitem__("z"):
                         self.CALL(val)
+                    else:
+                        return instruction.cycles[1]
 
             case Instruction(mnemonic="RET"):
                 operand = instruction.getOperands()
@@ -663,11 +736,13 @@ class CPU:
                         self.RET()
                     elif condition == "NZ" and not self.registers.__getitem__("z"):
                         self.RET()
+                    else:
+                        return instruction.cycles[1]
                 else:
                     self.RET()
 
             case Instruction(mnemonic="RETI"):
-                pass
+                raise InstructionError(f"Cannot execute {instruction}")
 
             case Instruction(mnemonic="RST"):
                 operands = instruction.getOperands()
@@ -682,11 +757,15 @@ class CPU:
 
     def run(self):
         while True:
-            cycles = self.executeNextOp()
+            self.update()
 
     def update(self):
         c_cycles = 0
         while c_cycles < self.maxcycles:
+            # blargg debug
+            self.blargg_update()
+            self.blargg_print()
+
             # execute
             cycles = self.executeNextOp()
             c_cycles += cycles
@@ -695,6 +774,9 @@ class CPU:
             timer_inter = self.timer.tick(cycles)
             if timer_inter:
                 self.setInterrupt(2)
+
+            # update graphics
+            self.screen.update(cycles)
 
             # check interrupts
             self.checkInterrupt()
@@ -744,3 +826,13 @@ class CPU:
 
         self.registers["PC"] = address
         self.i_master = False
+
+    def blargg_update(self):
+        if self.decoder.get(0xFF02) == 0x81:
+            val = chr(self.decoder.get(0xFF01))
+            self.blargg += val
+            self.decoder.set(0xFF02, 0)
+
+    def blargg_print(self):
+        if self.blargg:
+            print(self.blargg)

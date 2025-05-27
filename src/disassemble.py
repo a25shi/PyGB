@@ -15,7 +15,7 @@ class Decoder:
     unprefixed: dict
     cbprefixed: dict
 
-    def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address: int = 0,):
+    def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address: int = 0):
         self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
         self.memory = Memory(Path(filename).read_bytes(), metadata.cartridge_type, cpu)
         self.address = address
