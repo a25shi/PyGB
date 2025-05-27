@@ -1,0 +1,9 @@
+venv/
+cmake-build-debug/
+.idea/
+/cmake-build-debug/CMakeFiles
+test roms/
+# Cython
+/src/**/*c
+/src/build/
+build/
