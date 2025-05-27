@@ -1,4 +1,7 @@
 ./venv
 ./cmake-build-debug
-./.idea
+.idea
 ./cmake-build-debug/CMakeFiles
+# Cython
+/src/**/*c
+/src/build
