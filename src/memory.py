@@ -1,17 +1,17 @@
 import sys
-
+# from cpu import CPU
 
 class Memory:
-    def __init__(self, cartridge, cartridge_type, cpu):
+    def __init__(self, cartridge, cartridge_type: int, cpu):
         self.ram = [0] * 0x8000  # cartridge ram, including banks (up to 4)
         self.hram = [0] * 128 # internal hram
         self.i_ram = [0] * 8192 # 8kb internal ram
         self.junk_rom = [0] * 0x10000 # all unimplemented features are stored here
         self.cartridge = cartridge
-        self.rom_bank = 1  # rom banks for cartridge
-        self.ram_bank = 0  # current ram bank
-        self.ram_enabled = False
-        self.rom_enabled = True
+        self.rom_bank: int = 1  # rom banks for cartridge
+        self.ram_bank: int = 0  # current ram bank
+        self.ram_enabled: bool = False
+        self.rom_enabled: bool = True
 
         # needs access to cpu
         self.cpu = cpu
@@ -23,7 +23,8 @@ class Memory:
         else:
             raise ValueError(f"Unimplemented Cartridge Type of value: {cartridge_type}")
 
-    def set(self, address, value):
+    def set(self, address: int, value: int, tick: int = 4):
+        value &= 0xFF
         if address < 0:
             raise ValueError(f"Trying to write negative address {hex(address)} (value:{value})")
 
@@ -57,6 +58,11 @@ class Memory:
 
         # write to Timer
         elif 0xFF04 <= address <= 0xFF07:
+            # Tick to sync
+            if self.cpu.timer.tick(tick):
+                self.cpu.setInterrupt(2)
+            self.cpu.sync_cycles[0] += tick
+
             if address == 0xFF04:
                 self.cpu.timer.reset()
             elif address == 0xFF05:
@@ -64,11 +70,48 @@ class Memory:
             elif address == 0xFF06:
                 self.cpu.timer.TMA = value
             elif address == 0xFF07:
+                temp = self.cpu.timer.TAC
                 self.cpu.timer.TAC = value & 0b111
-                self.cpu.timer.resetCounter()
+                if temp != self.cpu.timer.TAC:
+                    self.cpu.timer.resetCounter()
 
         elif address == 0xFF0F:
             self.cpu.i_flag = value
+
+        # TODO: SCREEN
+        elif 0xFF40 <= address <= 0xFF4B:
+            self.cpu.screen.update(tick)
+            self.cpu.sync_cycles[1] += tick
+
+            if address == 0xFF40:
+                self.cpu.screen.LCDC.set(value)
+            elif address == 0xFF41:
+                self.cpu.screen.STAT.set(value)
+            elif address == 0xFF42:
+                self.cpu.screen.SCY = value
+            elif address == 0xFF43:
+                self.cpu.screen.SCX = value
+            elif address == 0xFF44:
+                # read only
+                return
+            elif address == 0xFF45:
+                self.cpu.screen.LYC = value
+            elif address == 0xFF46:
+                self.dma(value)
+            # TODO implement
+            elif address == 0xFF47:
+                pass
+            elif address == 0xFF48:
+                pass
+            elif address == 0xFF49:
+                pass
+            elif address == 0xFF4A:
+                self.cpu.screen.WY = value
+            elif address == 0xFF4B:
+                self.cpu.screen.WX = value
+
+            self.junk_rom[address] = value
+
 
         # Internal HRAM
         elif 0xFF80 <= address < 0xFFFF:
@@ -81,7 +124,7 @@ class Memory:
         else:
             self.junk_rom[address] = value
 
-    def get(self, address: int, counter: int = 1):
+    def get(self, address: int, counter: int = 1, tick: int = 4):
         if address < 0:
             raise ValueError(f"Trying to read negative address {hex(address)}")
 
@@ -129,6 +172,10 @@ class Memory:
 
         # Timer
         elif 0xFF04 <= address <= 0xFF07:
+            if self.cpu.timer.tick(tick):
+                self.cpu.setInterrupt(2)
+            self.cpu.sync_cycles[0] += tick
+
             if address == 0xFF04:
                 return self.cpu.timer.DIV
             elif address == 0xFF05:
@@ -144,9 +191,40 @@ class Memory:
         elif address == 0xFF0F:
             return self.cpu.i_flag
 
-        # # TODO: screen
-        # elif 0xFF40 <= address <= 0xFF4B:
-        #     pass
+        # TODO: screen
+        elif 0xFF40 <= address <= 0xFF4B:
+            self.cpu.screen.update(tick)
+            self.cpu.sync_cycles[1] += tick
+
+            if address == 0xFF40:
+                return self.cpu.screen.LCDC.value
+            elif address == 0xFF41:
+                return self.cpu.screen.STAT.value
+            elif address == 0xFF42:
+                return self.cpu.screen.SCY
+            elif address == 0xFF43:
+                return self.cpu.screen.SCX
+            elif address == 0xFF44:
+                return self.cpu.screen.LY
+                # return 0x90
+            elif address == 0xFF45:
+                return self.cpu.screen.LYC
+            elif address == 0xFF46:
+                return 0x00
+            # TODO implement
+            elif address == 0xFF47:
+                pass
+            elif address == 0xFF48:
+                pass
+            elif address == 0xFF49:
+                pass
+            elif address == 0xFF4A:
+                return self.cpu.screen.WY
+            elif address == 0xFF4B:
+                return self.cpu.screen.WX
+
+            data = self.junk_rom[address: address + counter]
+            return int.from_bytes(data, sys.byteorder)
 
         # Internal HRAM
         elif 0xFF80 <= address < 0xFFFF:

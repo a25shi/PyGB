@@ -1,6 +1,7 @@
 from setuptools import setup
 from Cython.Build import cythonize
+list = ["cartridge.py", "memory.py", "disassemble.py", "opcodes.py", "timer.py", "screen.py", "cpu.py"]
 
 setup(
-    ext_modules=cythonize(["cartridge.py", "memory.py"], compiler_directives={'language_level': "3"})
+    ext_modules=cythonize(list, compiler_directives={'language_level': "3"})
 )

@@ -1,6 +1,6 @@
 from disassemble import Decoder, disassemble
 from cartridge import get_cartridge_metadata
-from cpu import *
+import cpu
 from pathlib import Path
 
 def init(cpu_):
@@ -43,14 +43,15 @@ def init(cpu_):
     cpu_.decoder.set(0xFF4B, 0x00)
     cpu_.decoder.set(0xFFFF, 0x00)
 
-filename = '../test roms/blargg tests/cpu_instrs/individual/05-op rp.gb'
+# filename = '../test roms/blargg tests/mem_timing-2/rom_singles/01-read_timing.gb'
+filename = '../test roms/blargg tests/mem_timing/individual/01-read_timing.gb'
+# filename = '../test roms/blargg tests/cpu_instrs/cpu_instrs.gb'
 metadata = get_cartridge_metadata(filename)
 print(metadata)
-cpu = CPU(filename, metadata)
+cpu = cpu.CPU(filename, metadata)
 # decoder = Decoder('Opcodes.json', filename, address=0, metadata=metadata, cpu=cpu)
-# disassemble(decoder, 0x100, 100)
+# disassemble(decoder, 0x100, 200)
 init(cpu)
-# Initial register values
 cpu.run()
 
 

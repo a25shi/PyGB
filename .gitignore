@@ -7,3 +7,4 @@ test roms/
 /src/**/*c
 /src/build/
 build/
+*.pyd

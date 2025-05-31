@@ -4,13 +4,13 @@ class Screen:
         self.OAM = [0] * 0xA0
         self.LCDC = LCDCRegister()  # ($FF40)
         self.STAT = STATRegister()  # ($FF41)
-        self.SCY = 0  # BG scroll y
-        self.SCX = 0  # BG scroll x
-        self.WY = 0  # Window Y Position ($FF4A)
-        self.WX = 0  # Window X Position ($FF4B)
-        self.LY = 0  # LCDC Y-coordinate ($FF44)
-        self.LYC = 0  # LY Compare (if equal to LY, it causes STAT to set coincident flag) ($FF45)
-        self.scan_counter = 456
+        self.SCY: int = 0  # BG scroll y
+        self.SCX: int = 0  # BG scroll x
+        self.WY: int = 0  # Window Y Position ($FF4A)
+        self.WX: int = 0  # Window X Position ($FF4B)
+        self.LY: int = 0  # LCDC Y-coordinate ($FF44)
+        self.LYC: int = 0  # LY Compare (if equal to LY, it causes STAT to set coincident flag) ($FF45)
+        self.scan_counter: int = 456
 
         # store cpu
         self.cpu = cpu
@@ -88,8 +88,8 @@ class Screen:
 
 class STATRegister:
     def __init__(self):
-        self.value = 0b1000_0000
-        self._mode = 0
+        self.value: int = 0b1000_0000
+        self._mode: int = 0
 
     def set(self, value):
         value &= 0b0111_1000  # Bit 7 is always set, and bit 0-2 are read-only
@@ -125,19 +125,19 @@ class STATRegister:
 
 class LCDCRegister:
     def __init__(self):
-        self.value = 0
-        self.lcd_enable = 0
-        self.windowmap_select = 0
-        self.window_enable = 0
-        self.tiledata_select = 0
-        self.backgroundmap_select = 0
-        self.sprite_height = 0
-        self.sprite_enable = 0
-        self.background_enable = 0
-        self.backgroundmap_offset = 0x1800
-        self.windowmap_offset = 0x1800
+        self.value: int = 0
+        self.lcd_enable: int = 0
+        self.windowmap_select: int = 0
+        self.window_enable: int = 0
+        self.tiledata_select: int = 0
+        self.backgroundmap_select: int = 0
+        self.sprite_height: int = 0
+        self.sprite_enable: int = 0
+        self.background_enable: int = 0
+        self.backgroundmap_offset: int = 0x1800
+        self.windowmap_offset: int = 0x1800
 
-    def set(self, value):
+    def set(self, value: int):
         self.value = value
         self.lcd_enable = value & (1 << 7)
         self.windowmap_select = value & (1 << 6)

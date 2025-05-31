@@ -12,8 +12,8 @@ class Decoder:
     # program counter
     address: int
     # instructions
-    unprefixed: dict
-    cbprefixed: dict
+    unprefixed: list
+    cbprefixed: list
 
     def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address: int = 0):
         self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
@@ -21,17 +21,18 @@ class Decoder:
         self.address = address
 
     # get bytes from memory
-    def get(self, address: int, counter: int = 1):
-        return self.memory.get(address, counter)
+    def get(self, address: int, counter: int = 1, tick: int = 4):
+        return self.memory.get(address, counter, tick)
 
     # set bytes at memory
-    def set(self, address: int, value: int):
-        self.memory.set(address, value)
+    def set(self, address: int, value: int, tick: int = 4):
+        self.memory.set(address, value, tick)
 
     # decodes instruction at address
     def decode(self, address: int):
         # opcode = item at pc
-        opcode = self.get(address)
+        opcode: int = self.get(address)
+        cbbool: bool = False
         # iterate pc
         address += 1
         # if prefixed opcode, read next item and get cb instruction
@@ -39,10 +40,10 @@ class Decoder:
             opcode = self.get(address)
             address += 1
             instruction = self.cbprefixed[opcode]
+            cbbool = True
         # if not, get instruction normally
         else:
             instruction = self.unprefixed[opcode]
-
         # operand array
         oparr = []
 
@@ -54,22 +55,20 @@ class Decoder:
                 val = self.get(address, operand.bytes)
                 address += operand.bytes
                 # create operand copy with value stored
-                newop = operand.copy()
-                newop.setValue(val)
-                oparr.append(newop)
+                operand.setValue(val)
+                oparr.append(operand)
             # if no bytes, not memory address
             else:
                 oparr.append(operand)
         # Copy instruction and set new operands
-        ret_instr = instruction.copy()
-        ret_instr.setOperands(oparr)
-        return address, ret_instr
+        instruction.setOperands(oparr)
+        return address, instruction, cbbool
 
 
 def disassemble(decoder: Decoder, address, count: int):
     for _ in range(count):
         try:
-            new_address, instruction = decoder.decode(address)
+            new_address, instruction, cb = decoder.decode(address)
             pp = instruction.print()
             print(f'{address:>04X} {pp}')
             address = new_address

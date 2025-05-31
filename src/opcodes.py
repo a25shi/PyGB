@@ -67,7 +67,7 @@ class Instruction:
 
     def print(self):
         ops = ', '.join(op.print() for op in self.operands)
-        s = f"{self.opcode} {self.mnemonic:<8} {ops}"
+        s = f"{hex(self.opcode)} {self.mnemonic:<8} {ops}"
         return s
 
 
@@ -90,7 +90,7 @@ def getOpcodes(filename):
                                 adjust=None)
             oplist.append(operation)
         cbprefixed.append(
-            Instruction(opcode=ninstr, immediate=instr["immediate"], bytes=instr.get("bytes"), cycles=instr["cycles"],
+            Instruction(opcode=int(ninstr, 16), immediate=instr["immediate"], bytes=instr.get("bytes"), cycles=instr["cycles"],
                         mnemonic=instr["mnemonic"], operands=oplist))
 
     for ninstr in instructions["unprefixed"]:
@@ -106,6 +106,6 @@ def getOpcodes(filename):
                                 adjust=adjust)
             oplist.append(operation)
         unprefixed.append(
-            Instruction(opcode=ninstr, immediate=instr["immediate"], bytes=instr.get("bytes"), cycles=instr["cycles"],
+            Instruction(opcode=int(ninstr, 16), immediate=instr["immediate"], bytes=instr.get("bytes"), cycles=instr["cycles"],
                         mnemonic=instr["mnemonic"], operands=oplist))
     return unprefixed, cbprefixed
