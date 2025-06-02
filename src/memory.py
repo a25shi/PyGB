@@ -1,8 +1,9 @@
 import sys
 # from cpu import CPU
-
+from cartridge import CartridgeMetadata
 class Memory:
-    def __init__(self, cartridge, cartridge_type: int, cpu):
+    def __init__(self, cartridge, cartridge_metadata: CartridgeMetadata , cpu):
+        # TODO: fix ram
         self.ram = [0] * 0x8000  # cartridge ram, including banks (up to 4)
         self.hram = [0] * 128 # internal hram
         self.i_ram = [0] * 8192 # 8kb internal ram
@@ -12,25 +13,56 @@ class Memory:
         self.ram_bank: int = 0  # current ram bank
         self.ram_enabled: bool = False
         self.rom_enabled: bool = True
+        self.total_ram_banks = 0
 
         # needs access to cpu
         self.cpu = cpu
 
-        if 1 <= cartridge_type <= 3:
+        cartridge_type = cartridge_metadata.cartridge_type
+        ram_size = cartridge_metadata.ram_size
+
+        # Set mbc
+        if cartridge_type == 0:
+            self.mbc = 0
+        elif 1 <= cartridge_type <= 3:
             self.mbc = 1
         elif 5 <= cartridge_type <= 6:
             self.mbc = 2
         else:
             raise ValueError(f"Unimplemented Cartridge Type of value: {cartridge_type}")
 
-    def set(self, address: int, value: int, tick: int = 4):
+        # set RAM
+        if ram_size in range(1, 3):
+            self.total_ram_banks = 1
+        elif ram_size == 3:
+            self.total_ram_banks = 4
+        elif ram_size == 4:
+            self.total_ram_banks = 16
+        elif ram_size == 5:
+            self.total_ram_banks = 8
+
+    def sync(self):
+        # Timer tick
+        if self.cpu.timer.tick(self.cpu.cycles):
+            self.cpu.setInterrupt(2)
+
+        # Screen tick
+        self.cpu.screen.update(self.cpu.cycles)
+
+        # Sync
+        self.cpu.sync_cycles += self.cpu.cycles
+
+        # Reset
+        self.cpu.cycles = 0
+
+    def set(self, address: int, value: int):
         value &= 0xFF
         if address < 0:
             raise ValueError(f"Trying to write negative address {hex(address)} (value:{value})")
 
         if value is None:
             raise ValueError(f"Trying to write None to {hex(address)}")
-
+        self.sync()
         if address < 0x8000:
             self.handleROMSet(address, value)
 
@@ -58,11 +90,6 @@ class Memory:
 
         # write to Timer
         elif 0xFF04 <= address <= 0xFF07:
-            # Tick to sync
-            if self.cpu.timer.tick(tick):
-                self.cpu.setInterrupt(2)
-            self.cpu.sync_cycles[0] += tick
-
             if address == 0xFF04:
                 self.cpu.timer.reset()
             elif address == 0xFF05:
@@ -80,9 +107,6 @@ class Memory:
 
         # TODO: SCREEN
         elif 0xFF40 <= address <= 0xFF4B:
-            self.cpu.screen.update(tick)
-            self.cpu.sync_cycles[1] += tick
-
             if address == 0xFF40:
                 self.cpu.screen.LCDC.set(value)
             elif address == 0xFF41:
@@ -111,8 +135,6 @@ class Memory:
                 self.cpu.screen.WX = value
 
             self.junk_rom[address] = value
-
-
         # Internal HRAM
         elif 0xFF80 <= address < 0xFFFF:
             self.hram[address - 0xFF80] = value
@@ -124,10 +146,10 @@ class Memory:
         else:
             self.junk_rom[address] = value
 
-    def get(self, address: int, counter: int = 1, tick: int = 4):
+    def get(self, address: int, counter: int = 1):
         if address < 0:
             raise ValueError(f"Trying to read negative address {hex(address)}")
-
+        self.sync()
         # Cartridge ROM
         if address < 0x4000:
             data = self.cartridge[address: address + counter]
@@ -172,10 +194,6 @@ class Memory:
 
         # Timer
         elif 0xFF04 <= address <= 0xFF07:
-            if self.cpu.timer.tick(tick):
-                self.cpu.setInterrupt(2)
-            self.cpu.sync_cycles[0] += tick
-
             if address == 0xFF04:
                 return self.cpu.timer.DIV
             elif address == 0xFF05:
@@ -193,9 +211,6 @@ class Memory:
 
         # TODO: screen
         elif 0xFF40 <= address <= 0xFF4B:
-            self.cpu.screen.update(tick)
-            self.cpu.sync_cycles[1] += tick
-
             if address == 0xFF40:
                 return self.cpu.screen.LCDC.value
             elif address == 0xFF41:
@@ -278,7 +293,8 @@ class Memory:
                         self.rom_bank = 1
                 # if on ram mode
                 else:
-                    self.ram_bank = value & 0b11
+                    self.ram_bank = (value & 0b11) % self.total_ram_banks
+
 
             elif 0x6000 <= address < 0x8000:
                 # set rom/ram enable mode

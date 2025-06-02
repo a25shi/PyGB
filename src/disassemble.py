@@ -17,16 +17,16 @@ class Decoder:
 
     def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address: int = 0):
         self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
-        self.memory = Memory(Path(filename).read_bytes(), metadata.cartridge_type, cpu)
+        self.memory = Memory(Path(filename).read_bytes(), metadata, cpu)
         self.address = address
 
     # get bytes from memory
-    def get(self, address: int, counter: int = 1, tick: int = 4):
-        return self.memory.get(address, counter, tick)
+    def get(self, address: int, counter: int = 1):
+        return self.memory.get(address, counter)
 
     # set bytes at memory
-    def set(self, address: int, value: int, tick: int = 4):
-        self.memory.set(address, value, tick)
+    def set(self, address: int, value: int):
+        self.memory.set(address, value)
 
     # decodes instruction at address
     def decode(self, address: int):

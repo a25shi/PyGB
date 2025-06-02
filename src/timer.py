@@ -23,7 +23,6 @@ class Timer:
         else:
             raise IndexError()
     def tick(self, cycles):
-
         # iterate timer div register
         self.DIV_counter += cycles
         self.DIV += self.DIV_counter >> 8  # Add overflown bits to DIV

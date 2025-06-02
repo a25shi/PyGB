@@ -43,9 +43,10 @@ def init(cpu_):
     cpu_.decoder.set(0xFF4B, 0x00)
     cpu_.decoder.set(0xFFFF, 0x00)
 
-# filename = '../test roms/blargg tests/mem_timing-2/rom_singles/01-read_timing.gb'
-filename = '../test roms/blargg tests/mem_timing/individual/01-read_timing.gb'
+# filename = '../test roms/blargg tests/mem_timing/mem_timing.gb'
 # filename = '../test roms/blargg tests/cpu_instrs/cpu_instrs.gb'
+# filename = '../test roms/blargg tests/instr_timing/instr_timing.gb'
+# filename = "../test roms/mooneye/acceptance/bits/reg_f.gb"
 metadata = get_cartridge_metadata(filename)
 print(metadata)
 cpu = cpu.CPU(filename, metadata)

@@ -20,7 +20,6 @@ FLAGS = {"c": 4, "h": 5, "n": 6, "z": 7}
 class InstructionError(Exception):
     pass
 
-
 # Registers
 @dataclass
 class Registers(MutableMapping):
@@ -89,9 +88,7 @@ class Registers(MutableMapping):
             else:
                 raise KeyError(f"No such register {key}")
 
-
 class CPU:
-
     def __init__(self, filename, metadata):
         self.registers = Registers(AF=0, BC=0, DE=0, HL=0, PC=0, SP=0)
         self.decoder = Decoder('Opcodes.json', filename, metadata, address=0, cpu=self)
@@ -104,7 +101,8 @@ class CPU:
         self.screen = Screen(self)
         self.blargg: str = ""
         self.halt: bool = False
-        self.sync_cycles = [0, 0] # index 0 is for timer, index 1 is for screen
+        self.sync_cycles = 0
+        self.cycles = 0
 
     def POP(self, operand: Operand):
         val = self.decoder.get(self.registers["SP"], 2)
@@ -247,6 +245,7 @@ class CPU:
         if cb:
             if instruction.mnemonic == "BIT":
                 if operands[1].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[1].name]
@@ -259,6 +258,7 @@ class CPU:
                 self.registers.__setitem__("h", 1)
             elif instruction.mnemonic == "RES":
                 if operands[1].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[1].name]
@@ -266,12 +266,14 @@ class CPU:
                 shift = int(operands[0].name)
                 val = reg & ~(1 << shift)
                 if operands[1].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[1].name] = val
 
             elif instruction.mnemonic == "SET":
                 if operands[1].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[1].name]
@@ -280,11 +282,13 @@ class CPU:
                 val = reg | (1 << shift)
 
                 if operands[1].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[1].name] = val
             elif instruction.mnemonic == "SRL":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -298,11 +302,13 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "SWAP":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -317,11 +323,13 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "SRA":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -336,11 +344,13 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "SLA":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -355,11 +365,13 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "RR":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -375,11 +387,13 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "RL":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -395,12 +409,14 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
 
             elif instruction.mnemonic == "RRC":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -415,11 +431,13 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "RLC":
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     reg = self.decoder.get(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
@@ -434,9 +452,11 @@ class CPU:
                 # Set
                 val &= 0xFF
                 if operands[0].name == "HL":
+                    self.cycles += 4
                     self.decoder.set(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
+
             else:
                 raise InstructionError(f"Instruction {instruction} not yet implemented")
         else:
@@ -655,6 +675,7 @@ class CPU:
                 self.registers.__setitem__("h", (val & 0xF) + 1 > 0xF)
                 # set
                 val += 1
+                self.cycles += 4
                 self.decoder.set(ptr, val)
             elif opcode == 0x35:
                 ptr = self.registers["HL"]
@@ -665,9 +686,11 @@ class CPU:
                 self.registers.__setitem__("h", (val & 0xF) - 1 < 0)
                 # set
                 val -= 1
+                self.cycles += 4
                 self.decoder.set(ptr, val)
             elif opcode == 0x36:
                 ptr = self.registers["HL"]
+                self.cycles += 4
                 self.decoder.set(ptr, operands[1].value)
             elif opcode == 0x37:
                 self.registers.__setitem__("n", 0)
@@ -1166,6 +1189,7 @@ class CPU:
                 ptr = operands[0].value
                 a = self.registers["A"]
                 # (a8 + 0xFF00) = A
+                self.cycles += 4
                 self.decoder.set(ptr + 0xFF00, a)
             elif opcode == 0xE1:
                 self.POP(operands[0])
@@ -1202,7 +1226,8 @@ class CPU:
             elif opcode == 0xE9:
                 self.registers["PC"] = self.registers["HL"]
             elif opcode == 0xEA:
-                self.decoder.set(operands[0].value, self.registers["A"], tick=8)
+                self.cycles += 8
+                self.decoder.set(operands[0].value, self.registers["A"])
             elif opcode == 0xEE:
                 val = self.registers["A"]
                 res = operands[0].value
@@ -1218,6 +1243,7 @@ class CPU:
             elif opcode == 0xF0:
                 # (a8)
                 ptr = operands[1].value
+                self.cycles += 4
                 item = self.decoder.get(ptr + 0xFF00)
                 # A = (a8 + ff00)
                 self.registers["A"] = item
@@ -1265,7 +1291,8 @@ class CPU:
             elif opcode == 0xF9:
                 self.registers["SP"] = self.registers["HL"]
             elif opcode == 0xFA:
-                self.registers["A"] = self.decoder.get(operands[1].value, tick=8)
+                self.cycles += 8
+                self.registers["A"] = self.decoder.get(operands[1].value)
             elif opcode == 0xFB:
                 self.i_master = True
             elif opcode == 0xFE:
@@ -1317,7 +1344,7 @@ class CPU:
 
             # log
             # self.generateLog(f)
-
+            self.registers.print()
             # execute
             if not self.halt:
                 cycles = self.executeNextOp()
@@ -1328,16 +1355,16 @@ class CPU:
             c_cycles += cycles
 
             # tick timer
-            timer_inter = self.timer.tick(cycles - self.sync_cycles[0])
+            timer_inter = self.timer.tick(cycles - self.sync_cycles)
             if timer_inter:
                 self.setInterrupt(2)
 
             # update graphics
-            self.screen.update(cycles - self.sync_cycles[1])
+            self.screen.update(cycles - self.sync_cycles)
 
             # reset sync
-            self.sync_cycles[0] = 0
-            self.sync_cycles[1] = 0
+            self.sync_cycles = 0
+            self.cycles = 0
 
             # check interrupts
             if self.checkInterrupt():
@@ -1396,8 +1423,8 @@ class CPU:
     def handleInterrupt(self, flag, address):
         self.i_flag ^= flag  # remove flag
 
-        self.decoder.set(self.registers["SP"] - 1, self.registers["PC"] >> 8)
-        self.decoder.set(self.registers["SP"] - 2, self.registers["PC"] & 0xFF)
+        self.decoder.set((self.registers["SP"] - 1) & 0xFFFF, self.registers["PC"] >> 8)
+        self.decoder.set((self.registers["SP"] - 2) & 0xFFFF, self.registers["PC"] & 0xFF)
         self.registers["SP"] -= 2
 
         self.registers["PC"] = address
@@ -1413,3 +1440,4 @@ class CPU:
 
         if self.blargg and temp:
             print(self.blargg)
+
