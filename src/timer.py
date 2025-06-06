@@ -1,3 +1,4 @@
+import cython
 class Timer:
     def __init__(self):
         self.DIV: int = 0xabcc
@@ -6,6 +7,11 @@ class Timer:
         self.TMA: int = 0
         self.TIMA: int = 0
         self.counter: int = 1024 # default freq is 4096
+
+        if cython.compiled:
+            print("Running timer as Cython-compiled code")
+        else:
+            print("Running timer as pure Python")
 
     def resetCounter(self):
         self.counter = self.getFreq()

@@ -62,6 +62,7 @@ class Memory:
 
         if value is None:
             raise ValueError(f"Trying to write None to {hex(address)}")
+
         self.sync()
         if address < 0x8000:
             self.handleROMSet(address, value)
@@ -122,13 +123,12 @@ class Memory:
                 self.cpu.screen.LYC = value
             elif address == 0xFF46:
                 self.dma(value)
-            # TODO implement
             elif address == 0xFF47:
-                pass
+                self.cpu.screen.BGP.set(value)
             elif address == 0xFF48:
-                pass
+                self.cpu.screen.OBP0.set(value)
             elif address == 0xFF49:
-                pass
+                self.cpu.screen.OBP1.set(value)
             elif address == 0xFF4A:
                 self.cpu.screen.WY = value
             elif address == 0xFF4B:
@@ -226,13 +226,12 @@ class Memory:
                 return self.cpu.screen.LYC
             elif address == 0xFF46:
                 return 0x00
-            # TODO implement
             elif address == 0xFF47:
-                pass
+                return self.cpu.screen.BGP.get()
             elif address == 0xFF48:
-                pass
+                return self.cpu.screen.OBP0.get()
             elif address == 0xFF49:
-                pass
+                return self.cpu.screen.OBP1.get()
             elif address == 0xFF4A:
                 return self.cpu.screen.WY
             elif address == 0xFF4B:

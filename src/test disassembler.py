@@ -1,8 +1,6 @@
-from disassemble import Decoder, disassemble
 from cartridge import get_cartridge_metadata
 import cpu
 from pathlib import Path
-
 def init(cpu_):
     cpu_.registers.__setitem__("AF", 0x01B0)
     cpu_.registers.__setitem__("BC", 0x0013)
@@ -44,16 +42,18 @@ def init(cpu_):
     cpu_.decoder.set(0xFFFF, 0x00)
 
 # filename = '../test roms/blargg tests/mem_timing/mem_timing.gb'
-# filename = '../test roms/blargg tests/cpu_instrs/cpu_instrs.gb'
+filename = '../test roms/blargg tests/cpu_instrs/cpu_instrs.gb'
 # filename = '../test roms/blargg tests/instr_timing/instr_timing.gb'
 # filename = "../test roms/mooneye/acceptance/bits/reg_f.gb"
+# filename = "../test roms/super mario.gb"
 metadata = get_cartridge_metadata(filename)
 print(metadata)
 cpu = cpu.CPU(filename, metadata)
-# decoder = Decoder('Opcodes.json', filename, address=0, metadata=metadata, cpu=cpu)
-# disassemble(decoder, 0x100, 200)
 init(cpu)
 cpu.run()
+
+
+
 
 
 

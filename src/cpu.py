@@ -1,8 +1,6 @@
 import sys
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from io import TextIOWrapper
-
 from disassemble import Decoder
 from opcodes import Instruction, Operand
 from timer import Timer
@@ -185,7 +183,7 @@ class CPU:
         self.registers.__setitem__("h", 1)
         self.registers.__setitem__("c", 0)
 
-    def DEC_LOW(self, operand: Operand):
+    def DEC(self, operand: Operand):
         val = self.registers[operand.name]
         self.registers[operand.name] -= 1
         # flags
@@ -193,7 +191,7 @@ class CPU:
         self.registers.__setitem__("n", 1)
         self.registers.__setitem__("h", ((val & 0xF) - 1) < 0)
 
-    def INC_LOW(self, operand: Operand):
+    def INC(self, operand: Operand):
         val = self.registers[operand.name]
         self.registers[operand.name] += 1
         # flags
@@ -201,7 +199,7 @@ class CPU:
         self.registers.__setitem__("n", 0)
         self.registers.__setitem__("h", (val & 0xF) + 1 > 0xF)
 
-    def ADD_LOW(self, operand1: Operand, operand2: Operand):
+    def ADD(self, operand1: Operand, operand2: Operand):
         val = self.registers[operand1.name]
         res = self.registers[operand2.name]
         # flags
@@ -212,7 +210,7 @@ class CPU:
         # Set register value
         self.registers[operand1.name] = val + res
 
-    def SUB_LOW(self, operand: Operand):
+    def SUB(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
         # Flags
@@ -470,9 +468,9 @@ class CPU:
             elif opcode == 0x03:
                 self.registers["BC"] += 1
             elif opcode == 0x04:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x05:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x06:
                 self.registers["B"] = operands[1].value
             elif opcode == 0x07:
@@ -506,9 +504,9 @@ class CPU:
             elif opcode == 0x0B:
                 self.registers["BC"] -= 1
             elif opcode == 0x0C:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x0D:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x0E:
                 self.registers["C"] = operands[1].value
             elif opcode == 0x0F:
@@ -533,9 +531,9 @@ class CPU:
             elif opcode == 0x13:
                 self.registers["DE"] += 1
             elif opcode == 0x14:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x15:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x16:
                 self.registers["D"] = operands[1].value
             elif opcode == 0x17:
@@ -567,9 +565,9 @@ class CPU:
             elif opcode == 0x1B:
                 self.registers["DE"] -= 1
             elif opcode == 0x1C:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x1D:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x1E:
                 self.registers["E"] = operands[1].value
             elif opcode == 0x1F:
@@ -599,9 +597,9 @@ class CPU:
             elif opcode == 0x23:
                 self.registers["HL"] += 1
             elif opcode == 0x24:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x25:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x26:
                 self.registers["H"] = operands[1].value
             elif opcode == 0x27:
@@ -643,9 +641,9 @@ class CPU:
             elif opcode == 0x2B:
                 self.registers["HL"] -= 1
             elif opcode == 0x2C:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x2D:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x2E:
                 self.registers["L"] = operands[1].value
             elif opcode == 0x2F:
@@ -718,9 +716,9 @@ class CPU:
             elif opcode == 0x3B:
                 self.registers["SP"] -= 1
             elif opcode == 0x3C:
-                self.INC_LOW(operands[0])
+                self.INC(operands[0])
             elif opcode == 0x3D:
-                self.DEC_LOW(operands[0])
+                self.DEC(operands[0])
             elif opcode == 0x3E:
                 self.registers["A"] = operands[1].value
             elif opcode == 0x3F:
@@ -863,17 +861,17 @@ class CPU:
             elif opcode == 0x7F:
                 self.registers["A"] = self.registers["A"]
             elif opcode == 0x80:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x81:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x82:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x83:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x84:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x85:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x86:
                 val = self.registers["A"]
                 res = self.decoder.get(self.registers["HL"])
@@ -885,7 +883,7 @@ class CPU:
                 # Set register value
                 self.registers["A"] = val + res
             elif opcode == 0x87:
-                self.ADD_LOW(operands[0], operands[1])
+                self.ADD(operands[0], operands[1])
             elif opcode == 0x88:
                 self.ADC(operands[1])
             elif opcode == 0x89:
@@ -912,17 +910,17 @@ class CPU:
             elif opcode == 0x8F:
                 self.ADC(operands[1])
             elif opcode == 0x90:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x91:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x92:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x93:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x94:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x95:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x96:
                 val = self.registers["A"]
                 res = self.decoder.get(self.registers["HL"])
@@ -934,7 +932,7 @@ class CPU:
                 # set
                 self.registers["A"] = val - res
             elif opcode == 0x97:
-                self.SUB_LOW(operands[0])
+                self.SUB(operands[0])
             elif opcode == 0x98:
                 self.SBC(operands[1])
             elif opcode == 0x99:
@@ -1309,17 +1307,14 @@ class CPU:
                 raise InstructionError(f"Unimplemented instruction: {instruction}")
 
         return instruction.cycles[0]
-
     def run(self):
-        start_time = time.time()
-        with open('log.txt', 'w') as f:
-            while True:
-                # for i in range (0, 50):
-                self.update(f)
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        print(f"Elapsed Time: {elapsed_time} seconds")
-
+        # start_time = time.time()
+        # with open('log.txt', 'w') as f:
+        while True:
+            self.update()
+        # end_time = time.time()
+        # elapsed_time = end_time - start_time
+        # print(f"Elapsed Time: {elapsed_time} seconds")
     def generateLog(self, file):
         a = self.registers["A"]
         f = self.registers["F"]
@@ -1336,15 +1331,16 @@ class CPU:
         mem3 = self.decoder.get(pc+2)
         mem4 = self.decoder.get(pc+3)
         file.write(f"A:{a:02x} F:{f:02x} B:{b:02x} C:{c:02x} D:{d:02x} E:{e:02x} H:{h:02x} L:{l:02x} SP:{sp:04x} PC:{pc:04x} PCMEM:{mem1:02x},{mem2:02x},{mem3:02x},{mem4:02x}\n")
-    def update(self, f):
+
+    def update(self):
         c_cycles = 0
         while c_cycles < self.maxcycles:
             # blargg debug
-            self.blargg_update()
+            # self.blargg_update()
 
             # log
             # self.generateLog(f)
-            self.registers.print()
+            # self.registers.print()
             # execute
             if not self.halt:
                 cycles = self.executeNextOp()
@@ -1376,7 +1372,6 @@ class CPU:
                 self.registers["PC"] += 1
 
             self.i_queue = False
-
 
     def executeNextOp(self):
         address = self.registers["PC"]
