@@ -9,10 +9,10 @@ class Memory:
         self.i_ram = [0] * 8192 # 8kb internal ram
         self.junk_rom = [0] * 0x10000 # all unimplemented features are stored here
         self.cartridge = cartridge
-        self.rom_bank: int = 1  # rom banks for cartridge
-        self.ram_bank: int = 0  # current ram bank
-        self.ram_enabled: bool = False
-        self.rom_enabled: bool = True
+        self.rom_bank = 1  # rom banks for cartridge
+        self.ram_bank = 0  # current ram bank
+        self.ram_enabled = False
+        self.rom_enabled = True
         self.total_ram_banks = 0
 
         # needs access to cpu
@@ -20,6 +20,7 @@ class Memory:
 
         cartridge_type = cartridge_metadata.cartridge_type
         ram_size = cartridge_metadata.ram_size
+        rom_size = cartridge_metadata.rom_size
 
         # Set mbc
         if cartridge_type == 0:
@@ -41,6 +42,10 @@ class Memory:
         elif ram_size == 5:
             self.total_ram_banks = 8
 
+        # set ROM size
+        self.total_rom_banks = 2**(rom_size + 1)
+        self.bank_bits = (1 << (rom_size + 1)) - 1
+
     def sync(self):
         # Timer tick
         if self.cpu.timer.tick(self.cpu.cycles):
@@ -55,20 +60,19 @@ class Memory:
         # Reset
         self.cpu.cycles = 0
 
-    def set(self, address: int, value: int):
-        value &= 0xFF
+    def set(self, address, value):
         if address < 0:
             raise ValueError(f"Trying to write negative address {hex(address)} (value:{value})")
 
         if value is None:
             raise ValueError(f"Trying to write None to {hex(address)}")
-
+        value &= 0xFF
         self.sync()
         if address < 0x8000:
             self.handleROMSet(address, value)
 
         elif 0x8000 <= address < 0xA000:
-            self.cpu.screen.VRAM[address - 0x8000] = value
+            self.cpu.screen.screenSet(address, value)
 
         # writing to RAM
         elif 0xA000 <= address < 0xC000:
@@ -87,66 +91,35 @@ class Memory:
 
         # OAM
         elif 0xFE00 <= address < 0xFEA0:
-            self.cpu.screen.OAM[address - 0xFE00] = value
+            self.cpu.screen.screenSet(address, value)
 
         # write to Timer
         elif 0xFF04 <= address <= 0xFF07:
-            if address == 0xFF04:
-                self.cpu.timer.reset()
-            elif address == 0xFF05:
-                self.cpu.timer.TIMA = value
-            elif address == 0xFF06:
-                self.cpu.timer.TMA = value
-            elif address == 0xFF07:
-                temp = self.cpu.timer.TAC
-                self.cpu.timer.TAC = value & 0b111
-                if temp != self.cpu.timer.TAC:
-                    self.cpu.timer.resetCounter()
+            self.cpu.timer.timerSet(address, value)
 
         elif address == 0xFF0F:
             self.cpu.i_flag = value
 
         # TODO: SCREEN
         elif 0xFF40 <= address <= 0xFF4B:
-            if address == 0xFF40:
-                self.cpu.screen.LCDC.set(value)
-            elif address == 0xFF41:
-                self.cpu.screen.STAT.set(value)
-            elif address == 0xFF42:
-                self.cpu.screen.SCY = value
-            elif address == 0xFF43:
-                self.cpu.screen.SCX = value
-            elif address == 0xFF44:
-                # read only
-                return
-            elif address == 0xFF45:
-                self.cpu.screen.LYC = value
-            elif address == 0xFF46:
+            if address == 0xFF46:
                 self.dma(value)
-            elif address == 0xFF47:
-                self.cpu.screen.BGP.set(value)
-            elif address == 0xFF48:
-                self.cpu.screen.OBP0.set(value)
-            elif address == 0xFF49:
-                self.cpu.screen.OBP1.set(value)
-            elif address == 0xFF4A:
-                self.cpu.screen.WY = value
-            elif address == 0xFF4B:
-                self.cpu.screen.WX = value
+            else:
+                self.cpu.screen.screenSet(address, value)
 
-            self.junk_rom[address] = value
         # Internal HRAM
         elif 0xFF80 <= address < 0xFFFF:
             self.hram[address - 0xFF80] = value
 
         # Interrupt enable register
         elif address == 0xFFFF:
+            # print(f"writing {bin(value)} to cpu.i_enable")
             self.cpu.i_enable = value
 
         else:
             self.junk_rom[address] = value
 
-    def get(self, address: int, counter: int = 1):
+    def get(self, address, counter = 1):
         if address < 0:
             raise ValueError(f"Trying to read negative address {hex(address)}")
         self.sync()
@@ -164,12 +137,12 @@ class Memory:
 
         # 8kB Video RAM
         elif 0x8000 <= address < 0xA000:
-            temp = address - 0x8000
-            data = self.cpu.screen.VRAM[temp: temp + counter]
-            return int.from_bytes(data, sys.byteorder)
+            return self.cpu.screen.screenGet(address, counter)
 
         # cartridge RAM access
         elif 0xA000 <= address < 0xC000:
+            if not self.ram_enabled:
+                return 0xFF
             temp = address - 0xA000
             offset = self.ram_bank * 0x2000
             data = self.ram[temp + offset: temp + offset + counter]
@@ -188,22 +161,11 @@ class Memory:
 
         # OAM
         elif 0xFE00 <= address < 0xFEA0:
-            temp = address - 0xFEA0
-            data = self.cpu.screen.OAM[temp : temp + counter]
-            return int.from_bytes(data, sys.byteorder)
+            return self.cpu.screen.screenGet(address, counter)
 
         # Timer
         elif 0xFF04 <= address <= 0xFF07:
-            if address == 0xFF04:
-                return self.cpu.timer.DIV
-            elif address == 0xFF05:
-                return self.cpu.timer.TIMA
-            elif address == 0xFF06:
-                return self.cpu.timer.TMA
-            elif address == 0xFF07:
-                return self.cpu.timer.TAC
-            # does nothing, but makes the ide stop complaining
-            return None
+            return self.cpu.timer.timerGet(address)
 
         # interrupt flag
         elif address == 0xFF0F:
@@ -211,34 +173,7 @@ class Memory:
 
         # TODO: screen
         elif 0xFF40 <= address <= 0xFF4B:
-            if address == 0xFF40:
-                return self.cpu.screen.LCDC.value
-            elif address == 0xFF41:
-                return self.cpu.screen.STAT.value
-            elif address == 0xFF42:
-                return self.cpu.screen.SCY
-            elif address == 0xFF43:
-                return self.cpu.screen.SCX
-            elif address == 0xFF44:
-                return self.cpu.screen.LY
-                # return 0x90
-            elif address == 0xFF45:
-                return self.cpu.screen.LYC
-            elif address == 0xFF46:
-                return 0x00
-            elif address == 0xFF47:
-                return self.cpu.screen.BGP.get()
-            elif address == 0xFF48:
-                return self.cpu.screen.OBP0.get()
-            elif address == 0xFF49:
-                return self.cpu.screen.OBP1.get()
-            elif address == 0xFF4A:
-                return self.cpu.screen.WY
-            elif address == 0xFF4B:
-                return self.cpu.screen.WX
-
-            data = self.junk_rom[address: address + counter]
-            return int.from_bytes(data, sys.byteorder)
+            return self.cpu.screen.screenGet(address)
 
         # Internal HRAM
         elif 0xFF80 <= address < 0xFFFF:
@@ -271,29 +206,31 @@ class Memory:
             elif 0x2000 <= address < 0x4000:
                 # take lower 5 bits of value
                 temp = value & 0b00011111
-                # take upper 3 bits of rom_bank
-                self.rom_bank &= 0b11100000
-                # combine
-                self.rom_bank |= temp
-                # if selected register is 0, set to 1
-                if self.rom_bank == 0:
-                    self.rom_bank = 1
+                # if equal to zero, set to 1
+                if temp == 0:
+                    temp = 1
+                # set, mask to only bits that are needed
+                self.rom_bank = temp
+                self.rom_bank &= self.bank_bits
 
             elif 0x4000 <= address < 0x6000:
                 # if on rom mode
                 if self.rom_enabled:
                     # take lower 5 bits of rom bank
                     self.rom_bank &= 0b00011111
-                    # take upper 3 bits of value
-                    temp = value & 0b11100000
-                    # combine
-                    self.rom_bank |= temp
+                    # if the initial is zero, set to 1
                     if self.rom_bank == 0:
                         self.rom_bank = 1
+                    # take upper 2 bits of value
+                    temp = value & 0b1100000
+                    # combine
+                    self.rom_bank |= temp
+                    # then mask
+                    self.rom_bank &= self.bank_bits
                 # if on ram mode
                 else:
-                    self.ram_bank = (value & 0b11) % self.total_ram_banks
-
+                    if self.ram_enabled:
+                        self.ram_bank = (value & 0b11) % self.total_ram_banks
 
             elif 0x6000 <= address < 0x8000:
                 # set rom/ram enable mode

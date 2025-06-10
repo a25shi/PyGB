@@ -3,7 +3,7 @@ from libc.stdint cimport int64_t, uint8_t, uint16_t, uint32_t, uint64_t
 import cython
 
 cdef class Timer:
-    cdef uint64_t DIV, DIV_counter, TIMA, TMA, TAC, counter
+    cdef int DIV, DIV_counter, TIMA, TMA, TAC, counter
 
     cdef void resetCounter(self)
 
@@ -12,4 +12,8 @@ cdef class Timer:
     @cython.locals(c_select=uint8_t)
     cdef uint64_t getFreq(self)
 
-    cdef bint tick(self, uint64_t)
+    cpdef bint tick(self, uint64_t)
+
+    cpdef void timerSet(self, uint16_t, uint8_t)
+
+    cpdef int timerGet(self, uint16_t)

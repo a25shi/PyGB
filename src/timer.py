@@ -1,18 +1,34 @@
 import cython
 class Timer:
     def __init__(self):
-        self.DIV: int = 0xabcc
-        self.DIV_counter: int = 0
-        self.TAC: int = 0
-        self.TMA: int = 0
-        self.TIMA: int = 0
-        self.counter: int = 1024 # default freq is 4096
+        self.DIV = 0xAD
+        self.DIV_counter = 0
+        self.TAC = 0
+        self.TMA = 0
+        self.TIMA = 0
+        self.counter = 1024 # default freq is 4096
 
-        if cython.compiled:
-            print("Running timer as Cython-compiled code")
+    def timerGet(self, address):
+        if address == 0xFF04:
+            return self.DIV
+        elif address == 0xFF05:
+            return self.TIMA
+        elif address == 0xFF06:
+            return self.TMA
         else:
-            print("Running timer as pure Python")
-
+            return self.TAC
+    def timerSet(self, address, value):
+        if address == 0xFF04:
+            self.reset()
+        elif address == 0xFF05:
+            self.TIMA = value
+        elif address == 0xFF06:
+            self.TMA = value
+        elif address == 0xFF07:
+            temp = self.TAC
+            self.TAC = value & 0b111
+            if temp != self.TAC:
+                self.resetCounter()
     def resetCounter(self):
         self.counter = self.getFreq()
     def getFreq(self):
@@ -29,6 +45,9 @@ class Timer:
         else:
             raise IndexError()
     def tick(self, cycles):
+        if cycles == 0:
+            return False
+
         # iterate timer div register
         self.DIV_counter += cycles
         self.DIV += self.DIV_counter >> 8  # Add overflown bits to DIV
@@ -56,3 +75,4 @@ class Timer:
     def reset(self):
         self.DIV_counter = 0
         self.DIV = 0
+        self.resetCounter()

@@ -4,7 +4,6 @@ from cartridge import CartridgeMetadata
 from memory import Memory
 from pathlib import Path
 
-
 @dataclass
 class Decoder:
     # game data
@@ -15,29 +14,29 @@ class Decoder:
     unprefixed: list
     cbprefixed: list
 
-    def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address: int = 0):
+    def __init__(self, opcodefile: str, filename: str, metadata: CartridgeMetadata, cpu, address):
         self.unprefixed, self.cbprefixed = opcodes.getOpcodes(opcodefile)
         self.memory = Memory(Path(filename).read_bytes(), metadata, cpu)
         self.address = address
 
     # get bytes from memory
-    def get(self, address: int, counter: int = 1):
+    def getMem(self, address, counter = 1):
         return self.memory.get(address, counter)
 
     # set bytes at memory
-    def set(self, address: int, value: int):
+    def setMem(self, address, value):
         self.memory.set(address, value)
 
     # decodes instruction at address
-    def decode(self, address: int):
+    def decode(self, address):
         # opcode = item at pc
-        opcode: int = self.get(address)
-        cbbool: bool = False
+        opcode = self.getMem(address)
+        cbbool = False
         # iterate pc
         address += 1
         # if prefixed opcode, read next item and get cb instruction
         if opcode == 0xCB:
-            opcode = self.get(address)
+            opcode = self.getMem(address)
             address += 1
             instruction = self.cbprefixed[opcode]
             cbbool = True
@@ -52,7 +51,7 @@ class Decoder:
             # if bytes its a memory address, and read the bytes
             if operand.bytes is not None:
                 # read memory value
-                val = self.get(address, operand.bytes)
+                val = self.getMem(address, operand.bytes)
                 address += operand.bytes
                 # create operand copy with value stored
                 operand.setValue(val)
@@ -62,13 +61,23 @@ class Decoder:
                 oparr.append(operand)
         # Copy instruction and set new operands
         instruction.setOperands(oparr)
-        return address, instruction, cbbool
+        return Wrapper(address, instruction, cbbool)
 
+# exists only to return instruction object since Cython doesn't allow objects in tuples
+class Wrapper:
+    address: int
+    instruction: object
+    cbbool: bool
+    def __init__(self, a, b, c):
+        self.address = a
+        self.instruction = b
+        self.cbbool = c
 
-def disassemble(decoder: Decoder, address, count: int):
+def disassemble(decoder: Decoder, address, count):
     for _ in range(count):
         try:
-            new_address, instruction, cb = decoder.decode(address)
+            wrapper = decoder.decode(address)
+            new_address, instruction, cb = wrapper.address, wrapper.instruction, wrapper.cbbool
             pp = instruction.print()
             print(f'{address:>04X} {pp}')
             address = new_address

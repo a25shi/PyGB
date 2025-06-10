@@ -1,125 +1,83 @@
-import sys
-from collections.abc import MutableMapping
-from dataclasses import dataclass
+from registers import Registers
 from disassemble import Decoder
 from opcodes import Instruction, Operand
 from timer import Timer
 from screen import Screen
 # from __pypy__ import newlist_hint
-import time
-
-# Constants
-REGISTERS_LOW = {"F": "AF", "C": "BC", "E": "DE", "L": "HL"}
-REGISTERS_HIGH = {"A": "AF", "B": "BC", "D": "DE", "H": "HL"}
-REGISTERS = {"AF", "BC", "DE", "HL", "PC", "SP"}
-FLAGS = {"c": 4, "h": 5, "n": 6, "z": 7}
-
+# cython: annotation_typing = False
 
 class InstructionError(Exception):
     pass
-
-# Registers
-@dataclass
-class Registers(MutableMapping):
-    AF: int
-    BC: int
-    DE: int
-    HL: int
-    PC: int
-    SP: int
-
-    def values(self):
-        return [self.AF, self.BC, self.DE, self.HL, self.PC, self.SP]
-
-    def __iter__(self):
-        return iter(self.values())
-
-    def __len__(self):
-        return len(self.values())
-
-    def print(self):
-        print(
-            f"AF: {hex(self.AF)} BC: {hex(self.BC)} DE: {hex(self.DE)} HL: {hex(self.HL)} PC: {hex(self.PC)} SP: {hex(self.SP)}")
-
-    def __setitem__(self, key: str, value: int):
-        if key in REGISTERS_HIGH:
-            register = REGISTERS_HIGH[key]
-            current_value = self[register]
-            setattr(self, register, (current_value & 0x00FF | (value << 8)) & 0xFFFF)
-        elif key in REGISTERS_LOW:
-            register = REGISTERS_LOW[key]
-            current_value = self[register]
-            setattr(self, register, (current_value & 0xFF00 | value & 0x00FF) & 0xFFFF)
-        elif key in FLAGS:
-            assert value in (0, 1), f"{value} must be 0 or 1"
-            flag_bit = FLAGS[key]
-            if value == 0:
-                self.AF = self.AF & ~(1 << flag_bit)
-            else:
-                self.AF = self.AF | (1 << flag_bit)
-        else:
-            if key in REGISTERS:
-                setattr(self, key, value & 0xFFFF)
-            else:
-                raise KeyError(f"No such register {key}")
-
-    def __delitem__(self, key: str):
-        raise NotImplementedError("Register deletion is not supported")
-
-    def __getitem__(self, key: str):
-        # Shift 8 bits to get high bits in register
-        if key in REGISTERS_HIGH:
-            register = REGISTERS_HIGH[key]
-            return getattr(self, register) >> 8
-        # Compare to get lower bits in register
-        elif key in REGISTERS_LOW:
-            register = REGISTERS_LOW[key]
-            return getattr(self, register) & 0xFF
-        # Shift [Flag] bits to get flag, and check if flag is set
-        elif key in FLAGS:
-            flag_bit = FLAGS[key]
-            return self.AF >> flag_bit & 1
-        # Else get whole register
-        else:
-            if key in REGISTERS:
-                return getattr(self, key)
-            else:
-                raise KeyError(f"No such register {key}")
 
 class CPU:
     def __init__(self, filename, metadata):
         self.registers = Registers(AF=0, BC=0, DE=0, HL=0, PC=0, SP=0)
         self.decoder = Decoder('Opcodes.json', filename, metadata, address=0, cpu=self)
-        self.maxcycles: int = 69905  # CPU clocks per second (4194304) / fixed number of frames we want
-        self.i_master: int = 0
-        self.i_enable: int = 0
-        self.i_flag: int = 0
-        self.i_queue: bool = False
+        self.maxcycles = 69905  # CPU clocks per second (4194304) / fixed number of frames we want
+        self.i_master = 0
+        self.i_enable = 0
+        self.i_flag = 0
+        self.i_queue = False
         self.timer = Timer()
         self.screen = Screen(self)
-        self.blargg: str = ""
-        self.halt: bool = False
+        self.blargg = ""
+        self.halt = False
         self.sync_cycles = 0
         self.cycles = 0
-
+    def initVals(self):
+        self.registers.__setitem__("AF", 0x01B0)
+        self.registers.__setitem__("BC", 0x0013)
+        self.registers.__setitem__("DE", 0x00D8)
+        self.registers.__setitem__("HL", 0x014D)
+        self.registers.__setitem__("SP", 0xFFFE)
+        self.registers.__setitem__("PC", 0x0100)
+        self.decoder.setMem(0xFF05, 0x00)
+        self.decoder.setMem(0xFF06, 0x00)
+        self.decoder.setMem(0xFF07, 0x00)
+        self.decoder.setMem(0xFF10, 0x80)
+        self.decoder.setMem(0xFF11, 0xBF)
+        self.decoder.setMem(0xFF12, 0xF3)
+        self.decoder.setMem(0xFF14, 0xBF)
+        self.decoder.setMem(0xFF16, 0x3F)
+        self.decoder.setMem(0xFF17, 0x00)
+        self.decoder.setMem(0xFF19, 0xBF)
+        self.decoder.setMem(0xFF1A, 0x7F)
+        self.decoder.setMem(0xFF1B, 0xFF)
+        self.decoder.setMem(0xFF1C, 0x9F)
+        self.decoder.setMem(0xFF1E, 0xBF)
+        self.decoder.setMem(0xFF20, 0xFF)
+        self.decoder.setMem(0xFF21, 0x00)
+        self.decoder.setMem(0xFF22, 0x00)
+        self.decoder.setMem(0xFF23, 0xBF)
+        self.decoder.setMem(0xFF24, 0x77)
+        self.decoder.setMem(0xFF25, 0xF3)
+        self.decoder.setMem(0xFF26, 0xF1)
+        self.decoder.setMem(0xFF40, 0x91)
+        self.decoder.setMem(0xFF42, 0x00)
+        self.decoder.setMem(0xFF43, 0x00)
+        self.decoder.setMem(0xFF45, 0x00)
+        self.decoder.setMem(0xFF47, 0xFC)
+        self.decoder.setMem(0xFF48, 0xFF)
+        self.decoder.setMem(0xFF48, 0xFF)
+        self.decoder.setMem(0xFF49, 0xFF)
+        self.decoder.setMem(0xFF4A, 0x00)
+        self.decoder.setMem(0xFF4B, 0x00)
+        self.decoder.setMem(0xFFFF, 0x00)
     def POP(self, operand: Operand):
-        val = self.decoder.get(self.registers["SP"], 2)
+        val = self.decoder.getMem(self.registers["SP"], 2)
         self.registers["SP"] += 2
         self.registers[operand.name] = val
-
     def PUSH(self, operand: Operand):
         val = self.registers[operand.name]
-        self.decoder.set(self.registers["SP"] - 1, val >> 8)
-        self.decoder.set(self.registers["SP"] - 2, val & 0xFF)
+        self.decoder.setMem(self.registers["SP"] - 1, val >> 8)
+        self.decoder.setMem(self.registers["SP"] - 2, val & 0xFF)
         self.registers["SP"] -= 2
 
-    def JP(self, value: int):
+    def JP(self, value):
         self.registers["PC"] = value
-
     def CP(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
-
         # Flags
         self.registers.__setitem__("z", val == res)
         self.registers.__setitem__("n", 1)
@@ -165,6 +123,7 @@ class CPU:
         val = self.registers["A"]
         res = self.registers[operand.name]
         self.registers["A"] = val | res
+
 
         # Flags
         self.registers.__setitem__("z", ((val | res) & 0xFF) == 0)
@@ -223,28 +182,28 @@ class CPU:
 
     def RET(self):
         sp = self.registers["SP"]
-        pc = self.decoder.get((sp + 1) & 0xFFFF) << 8
-        pc |= self.decoder.get(sp)
+        pc = self.decoder.getMem((sp + 1) & 0xFFFF) << 8
+        pc |= self.decoder.getMem(sp)
         sp += 2
         self.registers["PC"] = pc
         self.registers["SP"] = sp
 
-    def CALL(self, val: int):
+    def CALL(self, val):
         sp = self.registers.__getitem__("SP")
         pc = self.registers.__getitem__("PC")
-        self.decoder.set((sp - 1) & 0xFFFF, pc >> 8)
-        self.decoder.set((sp - 2) & 0xFFFF, pc & 0xFF)
+        self.decoder.setMem((sp - 1) & 0xFFFF, pc >> 8)
+        self.decoder.setMem((sp - 2) & 0xFFFF, pc & 0xFF)
         self.registers.__setitem__("PC", val)
         self.registers.__setitem__("SP", sp - 2)
 
-    def execute(self, instruction: Instruction, cb: bool):
-        opcode: int = instruction.opcode
+    def execute(self, instruction: Instruction, cb):
+        opcode = instruction.opcode
         operands = instruction.getOperands()
         if cb:
             if instruction.mnemonic == "BIT":
                 if operands[1].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[1].name]
                 shift = int(operands[0].name)
@@ -257,7 +216,7 @@ class CPU:
             elif instruction.mnemonic == "RES":
                 if operands[1].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[1].name]
 
@@ -265,14 +224,14 @@ class CPU:
                 val = reg & ~(1 << shift)
                 if operands[1].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[1].name] = val
 
             elif instruction.mnemonic == "SET":
                 if operands[1].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[1].name]
 
@@ -281,13 +240,13 @@ class CPU:
 
                 if operands[1].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[1].name] = val
             elif instruction.mnemonic == "SRL":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
 
@@ -301,13 +260,13 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "SWAP":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 val = ((reg & 0xF0) >> 4) | ((reg & 0x0F) << 4)
@@ -322,13 +281,13 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "SRA":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 val = ((reg >> 1) | (reg & 0x80)) + ((reg & 1) << 8)
@@ -343,13 +302,13 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "SLA":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 val = reg << 1
@@ -364,13 +323,13 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "RR":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 c = self.registers.__getitem__("c")
@@ -386,13 +345,13 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "RL":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 c = self.registers.__getitem__("c")
@@ -408,14 +367,14 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
 
             elif instruction.mnemonic == "RRC":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 val = (reg >> 1) + ((reg & 1) << 7) + ((reg & 1) << 8)
@@ -430,13 +389,13 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
             elif instruction.mnemonic == "RLC":
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    reg = self.decoder.get(self.registers["HL"])
+                    reg = self.decoder.getMem(self.registers["HL"])
                 else:
                     reg = self.registers[operands[0].name]
                 val = (reg << 1) + (reg >> 7)
@@ -451,7 +410,7 @@ class CPU:
                 val &= 0xFF
                 if operands[0].name == "HL":
                     self.cycles += 4
-                    self.decoder.set(self.registers["HL"], val)
+                    self.decoder.setMem(self.registers["HL"], val)
                 else:
                     self.registers[operands[0].name] = val
 
@@ -464,7 +423,7 @@ class CPU:
                 self.registers["BC"] = operands[1].value
             elif opcode == 0x02:
                 ptr = self.registers["BC"]
-                self.decoder.set(ptr, self.registers["A"])
+                self.decoder.setMem(ptr, self.registers["A"])
             elif opcode == 0x03:
                 self.registers["BC"] += 1
             elif opcode == 0x04:
@@ -487,8 +446,8 @@ class CPU:
             elif opcode == 0x08:
                 ptr = operands[0].value
                 sp = self.registers["SP"]
-                self.decoder.set(ptr, sp & 0xFF)
-                self.decoder.set(ptr + 1, sp >> 8)
+                self.decoder.setMem(ptr, sp & 0xFF)
+                self.decoder.setMem(ptr + 1, sp >> 8)
             elif opcode == 0x09:
                 val = self.registers["HL"]
                 res = self.registers["BC"]
@@ -500,7 +459,7 @@ class CPU:
                 self.registers["HL"] = val + res
             elif opcode == 0x0A:
                 ptr = self.registers["BC"]
-                self.registers["A"] = self.decoder.get(ptr)
+                self.registers["A"] = self.decoder.getMem(ptr)
             elif opcode == 0x0B:
                 self.registers["BC"] -= 1
             elif opcode == 0x0C:
@@ -527,7 +486,7 @@ class CPU:
                 self.registers["DE"] = operands[1].value
             elif opcode == 0x12:
                 ptr = self.registers["DE"]
-                self.decoder.set(ptr, self.registers["A"])
+                self.decoder.setMem(ptr, self.registers["A"])
             elif opcode == 0x13:
                 self.registers["DE"] += 1
             elif opcode == 0x14:
@@ -561,7 +520,7 @@ class CPU:
                 self.registers["HL"] = val + res
             elif opcode == 0x1A:
                 ptr = self.registers["DE"]
-                self.registers["A"] = self.decoder.get(ptr)
+                self.registers["A"] = self.decoder.getMem(ptr)
             elif opcode == 0x1B:
                 self.registers["DE"] -= 1
             elif opcode == 0x1C:
@@ -592,7 +551,7 @@ class CPU:
                 self.registers["HL"] = operands[1].value
             elif opcode == 0x22:
                 ptr = self.registers["HL"]
-                self.decoder.set(ptr, self.registers["A"])
+                self.decoder.setMem(ptr, self.registers["A"])
                 self.registers["HL"] += 1
             elif opcode == 0x23:
                 self.registers["HL"] += 1
@@ -636,7 +595,7 @@ class CPU:
                 self.registers["HL"] = val + res
             elif opcode == 0x2A:
                 ptr = self.registers["HL"]
-                self.registers["A"] = self.decoder.get(ptr)
+                self.registers["A"] = self.decoder.getMem(ptr)
                 self.registers["HL"] += 1
             elif opcode == 0x2B:
                 self.registers["HL"] -= 1
@@ -660,13 +619,13 @@ class CPU:
                 self.registers["SP"] = operands[1].value
             elif opcode == 0x32:
                 ptr = self.registers["HL"]
-                self.decoder.set(ptr, self.registers["A"])
+                self.decoder.setMem(ptr, self.registers["A"])
                 self.registers["HL"] -= 1
             elif opcode == 0x33:
                 self.registers["SP"] += 1
             elif opcode == 0x34:
                 ptr = self.registers["HL"]
-                val = self.decoder.get(ptr)
+                val = self.decoder.getMem(ptr)
                 # flags
                 self.registers.__setitem__("z", (val + 1) & 0xFF == 0)
                 self.registers.__setitem__("n", 0)
@@ -674,10 +633,10 @@ class CPU:
                 # set
                 val += 1
                 self.cycles += 4
-                self.decoder.set(ptr, val)
+                self.decoder.setMem(ptr, val)
             elif opcode == 0x35:
                 ptr = self.registers["HL"]
-                val = self.decoder.get(ptr)
+                val = self.decoder.getMem(ptr)
                 # flags
                 self.registers.__setitem__("z", (val - 1) & 0xFF == 0)
                 self.registers.__setitem__("n", 1)
@@ -685,11 +644,11 @@ class CPU:
                 # set
                 val -= 1
                 self.cycles += 4
-                self.decoder.set(ptr, val)
+                self.decoder.setMem(ptr, val)
             elif opcode == 0x36:
                 ptr = self.registers["HL"]
                 self.cycles += 4
-                self.decoder.set(ptr, operands[1].value)
+                self.decoder.setMem(ptr, operands[1].value)
             elif opcode == 0x37:
                 self.registers.__setitem__("n", 0)
                 self.registers.__setitem__("h", 0)
@@ -711,7 +670,7 @@ class CPU:
                 self.registers["HL"] = val + res
             elif opcode == 0x3A:
                 ptr = self.registers["HL"]
-                self.registers["A"] = self.decoder.get(ptr)
+                self.registers["A"] = self.decoder.getMem(ptr)
                 self.registers["HL"] -= 1
             elif opcode == 0x3B:
                 self.registers["SP"] -= 1
@@ -739,7 +698,7 @@ class CPU:
                 self.registers["B"] = self.registers["L"]
             elif opcode == 0x46:
                 ptr = self.registers["HL"]
-                self.registers["B"] = self.decoder.get(ptr)
+                self.registers["B"] = self.decoder.getMem(ptr)
             elif opcode == 0x47:
                 self.registers["B"] = self.registers["A"]
             elif opcode == 0x48:
@@ -756,7 +715,7 @@ class CPU:
                 self.registers["C"] = self.registers["L"]
             elif opcode == 0x4E:
                 ptr = self.registers["HL"]
-                self.registers["C"] = self.decoder.get(ptr)
+                self.registers["C"] = self.decoder.getMem(ptr)
             elif opcode == 0x4F:
                 self.registers["C"] = self.registers["A"]
             elif opcode == 0x50:
@@ -773,7 +732,7 @@ class CPU:
                 self.registers["D"] = self.registers["L"]
             elif opcode == 0x56:
                 ptr = self.registers["HL"]
-                self.registers["D"] = self.decoder.get(ptr)
+                self.registers["D"] = self.decoder.getMem(ptr)
             elif opcode == 0x57:
                 self.registers["D"] = self.registers["A"]
             elif opcode == 0x58:
@@ -790,7 +749,7 @@ class CPU:
                 self.registers["E"] = self.registers["L"]
             elif opcode == 0x5E:
                 ptr = self.registers["HL"]
-                self.registers["E"] = self.decoder.get(ptr)
+                self.registers["E"] = self.decoder.getMem(ptr)
             elif opcode == 0x5F:
                 self.registers["E"] = self.registers["A"]
             elif opcode == 0x60:
@@ -807,7 +766,7 @@ class CPU:
                 self.registers["H"] = self.registers["L"]
             elif opcode == 0x66:
                 ptr = self.registers["HL"]
-                self.registers["H"] = self.decoder.get(ptr)
+                self.registers["H"] = self.decoder.getMem(ptr)
             elif opcode == 0x67:
                 self.registers["H"] = self.registers["A"]
             elif opcode == 0x68:
@@ -824,25 +783,25 @@ class CPU:
                 self.registers["L"] = self.registers["L"]
             elif opcode == 0x6E:
                 ptr = self.registers["HL"]
-                self.registers["L"] = self.decoder.get(ptr)
+                self.registers["L"] = self.decoder.getMem(ptr)
             elif opcode == 0x6F:
                 self.registers["L"] = self.registers["A"]
             elif opcode == 0x70:
-                self.decoder.set(self.registers["HL"], self.registers["B"])
+                self.decoder.setMem(self.registers["HL"], self.registers["B"])
             elif opcode == 0x71:
-                self.decoder.set(self.registers["HL"], self.registers["C"])
+                self.decoder.setMem(self.registers["HL"], self.registers["C"])
             elif opcode == 0x72:
-                self.decoder.set(self.registers["HL"], self.registers["D"])
+                self.decoder.setMem(self.registers["HL"], self.registers["D"])
             elif opcode == 0x73:
-                self.decoder.set(self.registers["HL"], self.registers["E"])
+                self.decoder.setMem(self.registers["HL"], self.registers["E"])
             elif opcode == 0x74:
-                self.decoder.set(self.registers["HL"], self.registers["H"])
+                self.decoder.setMem(self.registers["HL"], self.registers["H"])
             elif opcode == 0x75:
-                self.decoder.set(self.registers["HL"], self.registers["L"])
+                self.decoder.setMem(self.registers["HL"], self.registers["L"])
             elif opcode == 0x76:
                 self.halt = True
             elif opcode == 0x77:
-                self.decoder.set(self.registers["HL"], self.registers["A"])
+                self.decoder.setMem(self.registers["HL"], self.registers["A"])
             elif opcode == 0x78:
                 self.registers["A"] = self.registers["B"]
             elif opcode == 0x79:
@@ -857,7 +816,7 @@ class CPU:
                 self.registers["A"] = self.registers["L"]
             elif opcode == 0x7E:
                 ptr = self.registers["HL"]
-                self.registers["A"] = self.decoder.get(ptr)
+                self.registers["A"] = self.decoder.getMem(ptr)
             elif opcode == 0x7F:
                 self.registers["A"] = self.registers["A"]
             elif opcode == 0x80:
@@ -874,7 +833,7 @@ class CPU:
                 self.ADD(operands[0], operands[1])
             elif opcode == 0x86:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 # flags
                 self.registers["z"] = ((val + res) & 0xFF) == 0
                 self.registers.__setitem__("n", 0)
@@ -898,7 +857,7 @@ class CPU:
                 self.ADC(operands[1])
             elif opcode == 0x8E:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 carry = self.registers["c"]
                 # flags
                 self.registers["z"] = (val + res + carry) & 0xFF == 0
@@ -923,7 +882,7 @@ class CPU:
                 self.SUB(operands[0])
             elif opcode == 0x96:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 # Flags
                 self.registers.__setitem__("z", (val - res) & 0xFF == 0)
                 self.registers.__setitem__("n", 1)
@@ -947,7 +906,7 @@ class CPU:
                 self.SBC(operands[1])
             elif opcode == 0x9E:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 carry = self.registers.__getitem__("c")
                 # Flags
                 self.registers.__setitem__("z", (val - res - carry) & 0xFF == 0)
@@ -972,7 +931,7 @@ class CPU:
                 self.AND(operands[0])
             elif opcode == 0xA6:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 self.registers["A"] = val & res
 
                 # Flags
@@ -996,7 +955,7 @@ class CPU:
                 self.XOR(operands[0])
             elif opcode == 0xAE:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 self.registers["A"] = val ^ res
 
                 # Flags
@@ -1020,7 +979,7 @@ class CPU:
                 self.OR(operands[0])
             elif opcode == 0xB6:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
+                res = self.decoder.getMem(self.registers["HL"])
                 self.registers["A"] = val | res
 
                 # Flags
@@ -1044,8 +1003,7 @@ class CPU:
                 self.CP(operands[0])
             elif opcode == 0xBE:
                 val = self.registers["A"]
-                res = self.decoder.get(self.registers["HL"])
-
+                res = self.decoder.getMem(self.registers["HL"])
                 # Flags
                 self.registers.__setitem__("z", val == res)
                 self.registers.__setitem__("n", 1)
@@ -1188,7 +1146,7 @@ class CPU:
                 a = self.registers["A"]
                 # (a8 + 0xFF00) = A
                 self.cycles += 4
-                self.decoder.set(ptr + 0xFF00, a)
+                self.decoder.setMem(ptr + 0xFF00, a)
             elif opcode == 0xE1:
                 self.POP(operands[0])
             elif opcode == 0xE2:
@@ -1196,7 +1154,7 @@ class CPU:
                 ptr = self.registers["C"]
                 a = self.registers["A"]
                 # (C + 0xFF00) = A
-                self.decoder.set(ptr + 0xFF00, a)
+                self.decoder.setMem(ptr + 0xFF00, a)
             elif opcode == 0xE5:
                 self.PUSH(operands[0])
             elif opcode == 0xE6:
@@ -1225,7 +1183,7 @@ class CPU:
                 self.registers["PC"] = self.registers["HL"]
             elif opcode == 0xEA:
                 self.cycles += 8
-                self.decoder.set(operands[0].value, self.registers["A"])
+                self.decoder.setMem(operands[0].value, self.registers["A"])
             elif opcode == 0xEE:
                 val = self.registers["A"]
                 res = operands[0].value
@@ -1242,12 +1200,12 @@ class CPU:
                 # (a8)
                 ptr = operands[1].value
                 self.cycles += 4
-                item = self.decoder.get(ptr + 0xFF00)
+                item = self.decoder.getMem(ptr + 0xFF00)
                 # A = (a8 + ff00)
                 self.registers["A"] = item
             elif opcode == 0xF1:
-                val = self.decoder.get(self.registers["SP"])
-                res = self.decoder.get(self.registers["SP"] + 1)
+                val = self.decoder.getMem(self.registers["SP"])
+                res = self.decoder.getMem(self.registers["SP"] + 1)
                 self.registers["SP"] += 2
                 self.registers["A"] = res
                 self.registers["F"] = val & 0xF0 & 0xF0
@@ -1255,14 +1213,14 @@ class CPU:
             elif opcode == 0xF2:
                 # (C)
                 ptr = self.registers["C"]
-                item = self.decoder.get(ptr + 0xFF00)
+                item = self.decoder.getMem(ptr + 0xFF00)
                 # A = (C + 0xFF00)
                 self.registers["A"] = item
             elif opcode == 0xF3:
-                self.i_master = False
+                self.i_master = 0
             elif opcode == 0xF5:
-                self.decoder.set(self.registers["SP"] - 1, self.registers["A"])
-                self.decoder.set(self.registers["SP"] - 2, self.registers["F"] & 0xF0)
+                self.decoder.setMem(self.registers["SP"] - 1, self.registers["A"])
+                self.decoder.setMem(self.registers["SP"] - 2, self.registers["F"] & 0xF0)
                 self.registers["SP"] -= 2
             elif opcode == 0xF6:
                 val = self.registers["A"]
@@ -1290,9 +1248,9 @@ class CPU:
                 self.registers["SP"] = self.registers["HL"]
             elif opcode == 0xFA:
                 self.cycles += 8
-                self.registers["A"] = self.decoder.get(operands[1].value)
+                self.registers["A"] = self.decoder.getMem(operands[1].value)
             elif opcode == 0xFB:
-                self.i_master = True
+                self.i_master = 1
             elif opcode == 0xFE:
                 val = self.registers["A"]
                 res = operands[0].value
@@ -1309,9 +1267,15 @@ class CPU:
         return instruction.cycles[0]
     def run(self):
         # start_time = time.time()
-        # with open('log.txt', 'w') as f:
-        while True:
-            self.update()
+        with open('log.txt', 'w') as f:
+            counter = 0
+            while True:
+                # if counter == 50:
+                #     self.registers.print()
+                #     counter = 0
+                self.update()
+                # counter += 1
+                # self.generateLog(f)
         # end_time = time.time()
         # elapsed_time = end_time - start_time
         # print(f"Elapsed Time: {elapsed_time} seconds")
@@ -1326,57 +1290,57 @@ class CPU:
         l = self.registers["L"]
         sp = self.registers["SP"]
         pc = self.registers["PC"]
-        mem1 = self.decoder.get(pc)
-        mem2 = self.decoder.get(pc+1)
-        mem3 = self.decoder.get(pc+2)
-        mem4 = self.decoder.get(pc+3)
+        mem1 = self.decoder.getMem(pc)
+        mem2 = self.decoder.getMem(pc + 1)
+        mem3 = self.decoder.getMem(pc + 2)
+        mem4 = self.decoder.getMem(pc + 3)
         file.write(f"A:{a:02x} F:{f:02x} B:{b:02x} C:{c:02x} D:{d:02x} E:{e:02x} H:{h:02x} L:{l:02x} SP:{sp:04x} PC:{pc:04x} PCMEM:{mem1:02x},{mem2:02x},{mem3:02x},{mem4:02x}\n")
 
     def update(self):
         c_cycles = 0
-        while c_cycles < self.maxcycles:
-            # blargg debug
-            # self.blargg_update()
+        # blargg debug
+        self.blargg_update()
 
-            # log
-            # self.generateLog(f)
-            # self.registers.print()
-            # execute
-            if not self.halt:
-                cycles = self.executeNextOp()
-            else:
-                cycles = 4
+        # log
+        # self.generateLog(f)
+        # self.registers.print()
+        # execute
+        if not self.halt:
+            cycles = self.executeNextOp()
+        else:
+            cycles = 4
 
-            # self.registers.print()
-            c_cycles += cycles
+        # self.registers.print()
+        c_cycles += cycles
 
-            # tick timer
-            timer_inter = self.timer.tick(cycles - self.sync_cycles)
-            if timer_inter:
-                self.setInterrupt(2)
+        # tick timer
+        timer_inter = self.timer.tick(cycles - self.sync_cycles)
+        if timer_inter:
+            self.setInterrupt(2)
 
-            # update graphics
-            self.screen.update(cycles - self.sync_cycles)
+        # update graphics
+        self.screen.update(cycles - self.sync_cycles)
 
-            # reset sync
-            self.sync_cycles = 0
-            self.cycles = 0
+        # reset sync
+        self.sync_cycles = 0
+        self.cycles = 0
 
-            # check interrupts
-            if self.checkInterrupt():
-                self.halt = False
+        # check interrupts
+        if self.checkInterrupt():
+            self.halt = False
 
-            # halt
-            if self.halt and self.i_queue:
-                self.halt = False
-                self.registers["PC"] += 1
+        # halt
+        if self.halt and self.i_queue:
+            self.halt = False
+            self.registers["PC"] += 1
 
-            self.i_queue = False
+        self.i_queue = False
 
     def executeNextOp(self):
         address = self.registers["PC"]
         try:
-            next_address, instruction, cb = self.decoder.decode(address)
+            wrapper = self.decoder.decode(address)
+            next_address, instruction, cb = wrapper.address, wrapper.instruction, wrapper.cbbool
             # print(f'{address:>04X} {instruction.print()}')
         except IndexError:
             raise InstructionError(f"Cannot execute on {address}")
@@ -1390,6 +1354,9 @@ class CPU:
 
     def checkInterrupt(self):
         total = (self.i_enable & 0b11111) & (self.i_flag & 0b11111)
+        # print(f"i_enable: {bin(self.i_enable)}")
+        # print(f"i_master: {bin(self.i_master)}")
+        # print(f"i_flag: {bin(self.i_flag)}")
         if total:
             # interrupt master check
             if self.i_master:
@@ -1418,19 +1385,19 @@ class CPU:
     def handleInterrupt(self, flag, address):
         self.i_flag ^= flag  # remove flag
 
-        self.decoder.set((self.registers["SP"] - 1) & 0xFFFF, self.registers["PC"] >> 8)
-        self.decoder.set((self.registers["SP"] - 2) & 0xFFFF, self.registers["PC"] & 0xFF)
+        self.decoder.setMem((self.registers["SP"] - 1) & 0xFFFF, self.registers["PC"] >> 8)
+        self.decoder.setMem((self.registers["SP"] - 2) & 0xFFFF, self.registers["PC"] & 0xFF)
         self.registers["SP"] -= 2
 
         self.registers["PC"] = address
         self.i_master = False
 
     def blargg_update(self):
-        temp: bool = False
-        if self.decoder.get(0xFF02) == 0x81:
-            val = chr(self.decoder.get(0xFF01))
+        temp = False
+        if self.decoder.getMem(0xFF02) == 0x81:
+            val = chr(int(self.decoder.getMem(0xFF01)))
             self.blargg += val
-            self.decoder.set(0xFF02, 0)
+            self.decoder.setMem(0xFF02, 0)
             temp = True
 
         if self.blargg and temp:
