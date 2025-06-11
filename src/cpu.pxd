@@ -4,6 +4,7 @@ import cython
 cimport disassemble
 cimport timer
 cimport screen
+cimport joypad
 
 cdef class InstructionError(Exception):
     pass
@@ -13,11 +14,12 @@ cdef class CPU:
     cdef public disassemble.Decoder decoder
     cdef public uint8_t i_master, i_enable, i_flag
     cdef public bint i_queue, halt
-    cdef public str blargg
+    cdef str blargg
     cdef public timer.Timer timer
     cdef public screen.Screen screen
+    cdef public joypad.Joypad joypad
     cdef public uint8_t sync_cycles, cycles
-    cdef public uint64_t maxcycles
+    cdef uint64_t maxcycles
 
     cpdef initVals(self)
     @cython.locals(val=uint16_t)
@@ -49,6 +51,7 @@ cdef class CPU:
     cdef void RET(self)
     @cython.locals(sp=uint16_t,pc=uint16_t)
     cdef void CALL(self, uint16_t)
+    cdef void JR(self, object)
     @cython.locals(opcode=int, shift=int, reg=int, ptr=uint16_t, res=int, val=int)
     cdef uint8_t execute(self, object, bint)
     cpdef void run(self)

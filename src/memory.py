@@ -93,6 +93,10 @@ class Memory:
         elif 0xFE00 <= address < 0xFEA0:
             self.cpu.screen.screenSet(address, value)
 
+        # Joypad
+        elif address == 0xFF00:
+            self.cpu.joypad.setJoypad(value)
+
         # write to Timer
         elif 0xFF04 <= address <= 0xFF07:
             self.cpu.timer.timerSet(address, value)
@@ -100,7 +104,7 @@ class Memory:
         elif address == 0xFF0F:
             self.cpu.i_flag = value
 
-        # TODO: SCREEN
+        # Screen write + dma
         elif 0xFF40 <= address <= 0xFF4B:
             if address == 0xFF46:
                 self.dma(value)
@@ -162,6 +166,10 @@ class Memory:
         # OAM
         elif 0xFE00 <= address < 0xFEA0:
             return self.cpu.screen.screenGet(address, counter)
+
+        # Joypad
+        elif address == 0xFF00:
+            return self.cpu.joypad.getJoypad()
 
         # Timer
         elif 0xFF04 <= address <= 0xFF07:

@@ -24,6 +24,7 @@ class Screen:
         # screen buffer
         self.screenBuffer = [0] * 160 * 144 * 3
         self._screen = pygame.display.set_mode((160 * 2, 144 * 2))
+        pygame.display.set_caption()
         self._screen.fill((0, 0, 0))
 
         # init pygame screen
@@ -270,7 +271,14 @@ class Screen:
         elif 0xFE00 <= address < 0xFEA0:
             self.OAM[address - 0xFE00] = value
         elif address == 0xFF40:
+            prev = self.LCDC.lcd_enable
             self.LCDC.set(value)
+            if prev and not self.LCDC.lcd_enable:
+                self.scan_counter = 0
+                self.setMode(0)
+                self.LY = 0
+            elif not prev and self.LCDC.lcd_enable:
+                pass
         elif address == 0xFF41:
             self.STAT.set(value)
         elif address == 0xFF42:

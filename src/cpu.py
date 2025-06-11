@@ -1,6 +1,7 @@
 from registers import Registers
 from disassemble import Decoder
 from opcodes import Instruction, Operand
+from joypad import Joypad
 from timer import Timer
 from screen import Screen
 # from __pypy__ import newlist_hint
@@ -20,6 +21,7 @@ class CPU:
         self.i_queue = False
         self.timer = Timer()
         self.screen = Screen(self)
+        self.joypad = Joypad()
         self.blargg = ""
         self.halt = False
         self.sync_cycles = 0
@@ -72,7 +74,6 @@ class CPU:
         self.decoder.setMem(self.registers["SP"] - 1, val >> 8)
         self.decoder.setMem(self.registers["SP"] - 2, val & 0xFF)
         self.registers["SP"] -= 2
-
     def JP(self, value):
         self.registers["PC"] = value
     def CP(self, operand: Operand):
@@ -83,7 +84,6 @@ class CPU:
         self.registers.__setitem__("n", 1)
         self.registers.__setitem__("h", (val & 0xF) - (res & 0xF) < 0)
         self.registers.__setitem__("c", val < res)
-
     def XOR(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
@@ -146,7 +146,7 @@ class CPU:
         val = self.registers[operand.name]
         self.registers[operand.name] -= 1
         # flags
-        self.registers.__setitem__("z", val - 1 == 0)
+        self.registers.__setitem__("z", (val - 1) & 0xFF == 0)
         self.registers.__setitem__("n", 1)
         self.registers.__setitem__("h", ((val & 0xF) - 1) < 0)
 
@@ -179,6 +179,9 @@ class CPU:
         self.registers.__setitem__("c", (val & 0xFF) - (res & 0xFF) < 0)
         # set
         self.registers["A"] = val - res
+
+    def JR(self, operand):
+        self.registers["PC"] += ((operand.value ^ 0x80) - 0x80)
 
     def RET(self):
         sp = self.registers["SP"]
@@ -544,7 +547,7 @@ class CPU:
             elif opcode == 0x20:
                 z = self.registers["z"]
                 if z == 0:
-                    self.registers["PC"] += ((operands[1].value ^ 0x80) - 0x80)
+                    self.JR(operands[1])
                 else:
                     return instruction.cycles[1]
             elif opcode == 0x21:
@@ -581,7 +584,7 @@ class CPU:
             elif opcode == 0x28:
                 z = self.registers["z"]
                 if z:
-                    self.registers["PC"] += ((operands[1].value ^ 0x80) - 0x80)
+                    self.JR(operands[1])
                 else:
                     return instruction.cycles[1]
             elif opcode == 0x29:
@@ -612,7 +615,7 @@ class CPU:
             elif opcode == 0x30:
                 c = self.registers["c"]
                 if c == 0:
-                    self.registers["PC"] += ((operands[1].value ^ 0x80) - 0x80)
+                    self.JR(operands[1])
                 else:
                     return instruction.cycles[1]
             elif opcode == 0x31:
@@ -656,7 +659,7 @@ class CPU:
             elif opcode == 0x38:
                 c = self.registers["c"]
                 if c:
-                    self.registers["PC"] += ((operands[1].value ^ 0x80) - 0x80)
+                    self.JR(operands[1])
                 else:
                     return instruction.cycles[1]
             elif opcode == 0x39:
@@ -1266,19 +1269,16 @@ class CPU:
 
         return instruction.cycles[0]
     def run(self):
-        # start_time = time.time()
         with open('log.txt', 'w') as f:
             counter = 0
             while True:
-                # if counter == 50:
-                #     self.registers.print()
-                #     counter = 0
+                # if counter == 10000:
+                    # self.generateLog(f)
+                    # self.registers.print()
+                    # counter = 0
                 self.update()
                 # counter += 1
-                # self.generateLog(f)
-        # end_time = time.time()
-        # elapsed_time = end_time - start_time
-        # print(f"Elapsed Time: {elapsed_time} seconds")
+
     def generateLog(self, file):
         a = self.registers["A"]
         f = self.registers["F"]
@@ -1338,6 +1338,7 @@ class CPU:
 
     def executeNextOp(self):
         address = self.registers["PC"]
+
         try:
             wrapper = self.decoder.decode(address)
             next_address, instruction, cb = wrapper.address, wrapper.instruction, wrapper.cbbool

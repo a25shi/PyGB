@@ -43,6 +43,7 @@ cdef class Screen:
     @cython.locals(line=int,pixel_index=int,byte1=uint8_t,byte2=uint8_t,col_index=uint8_t)
     cdef inline uint32_t getTileColorBGP(self,int,int,int)
     cdef void updatePyGame(self)
+    @cython.locals(prev=bint)
     cpdef void screenSet(self, uint16_t, uint8_t)
     cpdef uint16_t screenGet(self, uint16_t, uint8_t counter=*)
     @cython.locals(interrupt=bint)
