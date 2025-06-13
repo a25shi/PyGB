@@ -10,6 +10,12 @@ import pygame
 # from __pypy__ import newlist_hint
 # cython: annotation_typing = False
 
+import cython
+if cython.compiled:
+    print("Yep, I'm compiled.")
+else:
+    print("Just a lowly interpreted script.")
+
 class InstructionError(Exception):
     pass
 
@@ -1266,16 +1272,16 @@ class CPU:
                 raise InstructionError(f"Unimplemented instruction: {instruction}")
 
         return instruction.cycles[0]
+
     def run(self):
-        with open('log.txt', 'w') as f:
-            counter = 0
-            while True:
-                # if counter == 10000:
-                    # self.generateLog(f)
-                    # self.registers.print()
-                    # counter = 0
-                self.update()
-                # counter += 1
+        counter = 0
+        while True:
+            # if counter == 10000:
+            # self.generateLog(f)
+            # self.registers.print()
+            # counter = 0
+            self.update()
+            # counter += 1
     def generateLog(self, file):
         a = self.registers["A"]
         f = self.registers["F"]
