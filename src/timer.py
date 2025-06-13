@@ -1,4 +1,4 @@
-import cython
+
 class Timer:
     def __init__(self):
         self.DIV = 0xAD

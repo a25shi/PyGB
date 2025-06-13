@@ -1,9 +1,12 @@
+import sys
+import os
 from registers import Registers
 from disassemble import Decoder
 from opcodes import Instruction, Operand
 from joypad import Joypad
 from timer import Timer
 from screen import Screen
+import pygame
 # from __pypy__ import newlist_hint
 # cython: annotation_typing = False
 
@@ -13,7 +16,7 @@ class InstructionError(Exception):
 class CPU:
     def __init__(self, filename, metadata):
         self.registers = Registers(AF=0, BC=0, DE=0, HL=0, PC=0, SP=0)
-        self.decoder = Decoder('Opcodes.json', filename, metadata, address=0, cpu=self)
+        self.decoder = Decoder(os.path.join(os.path.dirname(__file__), 'Opcodes.json'), filename, metadata, address=0, cpu=self)
         self.maxcycles = 69905  # CPU clocks per second (4194304) / fixed number of frames we want
         self.i_master = 0
         self.i_enable = 0
@@ -94,7 +97,6 @@ class CPU:
         self.registers.__setitem__("n", 0)
         self.registers.__setitem__("h", 0)
         self.registers.__setitem__("c", 0)
-
     def SBC(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
@@ -106,7 +108,6 @@ class CPU:
         self.registers.__setitem__("c", (val & 0xFF) - (res & 0xFF) - (carry & 0xFF) < 0)
         # set
         self.registers["A"] = val - res - carry
-
     def ADC(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
@@ -118,7 +119,6 @@ class CPU:
         self.registers.__setitem__("c", val + res + carry > 0xFF)
         # Set register value
         self.registers["A"] = val + res + carry
-
     def OR(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
@@ -130,7 +130,6 @@ class CPU:
         self.registers.__setitem__("n", 0)
         self.registers.__setitem__("h", 0)
         self.registers.__setitem__("c", 0)
-
     def AND(self, operand: Operand):
         val = self.registers["A"]
         res = self.registers[operand.name]
@@ -141,7 +140,6 @@ class CPU:
         self.registers.__setitem__("n", 0)
         self.registers.__setitem__("h", 1)
         self.registers.__setitem__("c", 0)
-
     def DEC(self, operand: Operand):
         val = self.registers[operand.name]
         self.registers[operand.name] -= 1
@@ -1278,7 +1276,6 @@ class CPU:
                     # counter = 0
                 self.update()
                 # counter += 1
-
     def generateLog(self, file):
         a = self.registers["A"]
         f = self.registers["F"]
@@ -1296,14 +1293,82 @@ class CPU:
         mem4 = self.decoder.getMem(pc + 3)
         file.write(f"A:{a:02x} F:{f:02x} B:{b:02x} C:{c:02x} D:{d:02x} E:{e:02x} H:{h:02x} L:{l:02x} SP:{sp:04x} PC:{pc:04x} PCMEM:{mem1:02x},{mem2:02x},{mem3:02x},{mem4:02x}\n")
 
+    def handleEvents(self):
+        for event in pygame.event.get():
+            # Handle quit
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+            interrupt = False
+            if event.type == pygame.KEYUP:
+                updog = True
+                # dpad up
+                if event.key == pygame.K_w:
+                    interrupt = self.joypad.handleInput(2, updog)
+                # dpad down
+                elif event.key == pygame.K_s:
+                    interrupt = self.joypad.handleInput(3, updog)
+                # dpad left
+                elif event.key == pygame.K_a:
+                    interrupt = self.joypad.handleInput(1, updog)
+                # dpad right
+                elif event.key == pygame.K_d:
+                    interrupt = self.joypad.handleInput(0, updog)
+
+
+                # Select
+                elif event.key == pygame.K_k:
+                    interrupt = self.joypad.handleInput(6, updog)
+                # Start
+                elif event.key == pygame.K_l:
+                    interrupt = self.joypad.handleInput(7, updog)
+                # A
+                elif event.key == pygame.K_o:
+                    interrupt = self.joypad.handleInput(4, updog)
+                # B
+                elif event.key == pygame.K_p:
+                    interrupt = self.joypad.handleInput(5, updog)
+
+            elif event.type == pygame.KEYDOWN:
+                updog = False
+                # Joypad up
+                if event.key == pygame.K_w:
+                    interrupt = self.joypad.handleInput(2, updog)
+                # Joypad down
+                elif event.key == pygame.K_s:
+                    interrupt = self.joypad.handleInput(3, updog)
+                # Joypad left
+                elif event.key == pygame.K_a:
+                    interrupt = self.joypad.handleInput(1, updog)
+                # Joypad right
+                elif event.key == pygame.K_d:
+                    interrupt = self.joypad.handleInput(0, updog)
+
+                # Select
+                elif event.key == pygame.K_k:
+                    interrupt = self.joypad.handleInput(6, updog)
+                # Start
+                elif event.key == pygame.K_l:
+                    interrupt = self.joypad.handleInput(7, updog)
+                # A
+                elif event.key == pygame.K_o:
+                    interrupt = self.joypad.handleInput(4, updog)
+                # B
+                elif event.key == pygame.K_p:
+                    interrupt = self.joypad.handleInput(5, updog)
+
+            # Set joypad interrupt
+            if interrupt:
+                self.setInterrupt(4)
+
     def update(self):
         c_cycles = 0
         # blargg debug
-        self.blargg_update()
+        # self.blargg_update()
 
-        # log
-        # self.generateLog(f)
-        # self.registers.print()
+        # handle events
+        self.handleEvents()
+
         # execute
         if not self.halt:
             cycles = self.executeNextOp()
@@ -1338,11 +1403,9 @@ class CPU:
 
     def executeNextOp(self):
         address = self.registers["PC"]
-
         try:
             wrapper = self.decoder.decode(address)
             next_address, instruction, cb = wrapper.address, wrapper.instruction, wrapper.cbbool
-            # print(f'{address:>04X} {instruction.print()}')
         except IndexError:
             raise InstructionError(f"Cannot execute on {address}")
         self.registers["PC"] = next_address
@@ -1355,9 +1418,6 @@ class CPU:
 
     def checkInterrupt(self):
         total = (self.i_enable & 0b11111) & (self.i_flag & 0b11111)
-        # print(f"i_enable: {bin(self.i_enable)}")
-        # print(f"i_master: {bin(self.i_master)}")
-        # print(f"i_flag: {bin(self.i_flag)}")
         if total:
             # interrupt master check
             if self.i_master:

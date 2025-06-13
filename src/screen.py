@@ -21,10 +21,13 @@ class Screen:
         # store cpu
         self.cpu = cpu
 
+        # tile cache
+        # self.tile_cache = [0] * 8
+
         # screen buffer
         self.screenBuffer = [0] * 160 * 144 * 3
         self._screen = pygame.display.set_mode((160 * 2, 144 * 2))
-        pygame.display.set_caption()
+        pygame.display.set_caption("PyGB")
         self._screen.fill((0, 0, 0))
 
         # init pygame screen
@@ -91,6 +94,7 @@ class Screen:
                     if self.LY == 144:
                         self.cpu.setInterrupt(0)
                         self.clock.tick()
+
     def checkLYC(self):
         interrupt = self.STAT.update_LYC(self.LYC, self.LY)
         if interrupt:
@@ -117,6 +121,7 @@ class Screen:
             self.setPixelColor(x, self.LY, color)
     def renderBackground(self):
         wx = self.WX - 7
+        # TODO: Tile cache
         for x in range(0, 160):
             # If we are in range of the window
             if self.LCDC.window_enable and self.WY <= self.LY and x >= wx:
@@ -215,7 +220,7 @@ class Screen:
         try:
             current_time = pygame.time.get_ticks()
             # Here we limit FPS to get better performance
-            if current_time > self._last_draw + 50:
+            if current_time > self._last_draw + 30:
                 self._last_draw = current_time
                 main_surface = pygame.image.frombuffer(bytearray(self.screenBuffer), (160, 144), "RGB")
                 main_surface = pygame.transform.scale_by(main_surface, 2)
@@ -228,6 +233,7 @@ class Screen:
 
                 # update
                 pygame.display.update()
+
 
         except BaseException as e:
             raise Exception(f"Pygame frame error: {repr(e)}")

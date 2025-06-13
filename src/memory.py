@@ -179,7 +179,7 @@ class Memory:
         elif address == 0xFF0F:
             return self.cpu.i_flag
 
-        # TODO: screen
+        # Screen
         elif 0xFF40 <= address <= 0xFF4B:
             return self.cpu.screen.screenGet(address)
 
@@ -189,7 +189,7 @@ class Memory:
             data = self.hram[temp : temp + counter]
             return int.from_bytes(data, sys.byteorder)
 
-            # Interrupt enable register
+        # Interrupt enable register
         elif address == 0xFFFF:
             return self.cpu.i_enable
 

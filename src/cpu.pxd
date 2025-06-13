@@ -67,3 +67,5 @@ cdef class CPU:
     cdef void handleInterrupt(self, uint8_t, uint16_t)
     @cython.locals(temp=bint)
     cdef void blargg_update(self)
+    @cython.locals(updog=bint, interrupt=bint)
+    cdef void handleEvents(self)
