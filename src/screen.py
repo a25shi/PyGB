@@ -1,5 +1,6 @@
 import pygame
 import sys
+from array import array
 class Screen:
     def __init__(self, cpu):
         self.VRAM = [0] * 8192
@@ -22,7 +23,7 @@ class Screen:
         self.cpu = cpu
 
         # tile cache
-        # self.tile_cache = [0] * 8
+        self.tile_cache = TileCache()
 
         # screen buffer
         self.screenBuffer = [0] * 160 * 144 * 3
@@ -40,7 +41,6 @@ class Screen:
         # set up
         self.STAT.set_mode(0)
         self.next_mode = 2
-
     def update(self, cycles):
         if cycles == 0:
             return
@@ -94,7 +94,6 @@ class Screen:
                     if self.LY == 144:
                         self.cpu.setInterrupt(0)
                         self.clock.tick()
-
     def checkLYC(self):
         interrupt = self.STAT.update_LYC(self.LYC, self.LY)
         if interrupt:
@@ -113,6 +112,7 @@ class Screen:
             self.renderBlank()
         if self.LCDC.sprite_enable:
             self.renderSprites()
+        # reset window counter
         if self.LY == 143:
             self.WY_counter = -1
     def renderBlank(self):
@@ -121,22 +121,29 @@ class Screen:
             self.setPixelColor(x, self.LY, color)
     def renderBackground(self):
         wx = self.WX - 7
-        # TODO: Tile cache
         for x in range(0, 160):
             # If we are in range of the window
             if self.LCDC.window_enable and self.WY <= self.LY and x >= wx:
                 xPos = x - wx
                 yPos = self.WY_counter
                 offset = self.LCDC.windowmap_offset
+                xmask = xPos % 8
+                xmaskeq = wx
 
             # Otherwise, default to background
             else:
                 xPos = x + self.SCX
                 yPos = self.SCY + self.LY
                 offset = self.LCDC.backgroundmap_offset
+                xmask = (x + (self.SCX & 0b111)) % 8
+                xmaskeq = 0
 
-            tile_index = self.getTile(xPos, yPos, offset)
-            color = self.getTileColorBGP(tile_index, xPos, yPos)
+            if xmask == 0 or x == xmaskeq:
+                tile_index = self.getTile(xPos, yPos, offset)
+                self.tile_cache.updateTile(tile_index, self)
+
+            color_index = self.tile_cache.tile_cache[tile_index, xPos % 8, yPos % 8]
+            color = self.BGP.getcolor(color_index)
             self.setPixelColor(x, self.LY, color)
     def renderSprites(self):
         spriteheight = 16 if self.LCDC.sprite_height else 8
@@ -204,23 +211,11 @@ class Screen:
         if not self.LCDC.tiledata_select:
             tile_index = (tile_index ^ 0x80) + 128
         return tile_index
-    def getTileColorBGP(self, tile_index, x, y):
-        line = 2 * (y % 8)
-        # Rightmost bit is the leftmost pixel (bit 7 = pixel 0, bit 6 = pixel 1, etc.)
-        pixel_index = ((x % 8) - 7) * -1
-
-        byte1 = self.VRAM[tile_index * 16 + line]
-        byte2 = self.VRAM[tile_index * 16 + line + 1]
-
-        # byte 2 pixel is most significant, byte 1 is least
-        col_index = ((byte2 >> pixel_index) & 1) << 1
-        col_index |= (byte1 >> pixel_index) & 1
-        return self.BGP.getcolor(col_index)
     def updatePyGame(self):
         try:
             current_time = pygame.time.get_ticks()
             # Here we limit FPS to get better performance
-            if current_time > self._last_draw + 30:
+            if current_time > self._last_draw + 40:
                 self._last_draw = current_time
                 main_surface = pygame.image.frombuffer(bytearray(self.screenBuffer), (160, 144), "RGB")
                 main_surface = pygame.transform.scale_by(main_surface, 2)
@@ -274,6 +269,9 @@ class Screen:
     def screenSet(self, address, value):
         if 0x8000 <= address < 0xA000:
             self.VRAM[address - 0x8000] = value
+            if address < 0x9800:  # Is within tile data -- not tile maps
+            # Mask out the byte of the tile
+                self.tile_cache.clearTile(((address & 0xFFF0) - 0x8000) // 16)
         elif 0xFE00 <= address < 0xFEA0:
             self.OAM[address - 0xFE00] = value
         elif address == 0xFF40:
@@ -297,7 +295,8 @@ class Screen:
         elif address == 0xFF45:
             self.LYC = value
         elif address == 0xFF47:
-            self.BGP.set(value)
+            if self.BGP.set(value):
+                self.tile_cache.clearCache()
         elif address == 0xFF48:
             self.OBP0.set(value)
         elif address == 0xFF49:
@@ -395,3 +394,39 @@ class Palette:
 
     def getcolor(self, i):
         return self.lookup[i]
+
+class TileCache:
+    def __init__(self):
+        # Stores the tile state for each cached tile
+        self.tile_state = array("B", [0] * 384)
+
+        # Tile cache (384 tiles which are 8x8 each)
+        self.tile_cache_raw = array("B", [0] * 384 * 8 * 8)
+
+        # Tile cache memory view (In 3D form [Tile_index, x, y])
+        self.tile_cache = memoryview(self.tile_cache_raw).cast("B", shape=(384, 8, 8))
+
+    def updateTile(self, tile_index, screen: Screen):
+        if self.tile_state[tile_index]:
+            return
+        # Cache entire tile
+        for k in range(0, 16, 2):  # 2 bytes for each line
+            byte1 = screen.VRAM[tile_index * 16 + k]
+            byte2 = screen.VRAM[tile_index * 16 + k + 1]
+
+            y = k // 2
+
+            for i in range(0, 8):
+                # byte 2 pixel is most significant, byte 1 is least
+                col_index = ((byte2 >> i) & 1) << 1
+                col_index |= (byte1 >> i) & 1
+                x = 7 - i
+                # Rightmost bit is the leftmost pixel (bit 7 = pixel 0, bit 6 = pixel 1, etc.)
+                self.tile_cache[tile_index, x, y] = col_index
+
+        self.tile_state[tile_index] = 1
+    def clearCache(self):
+        for i in range(384):
+            self.tile_state[i] = 0
+    def clearTile(self, tile_index):
+        self.tile_state[tile_index] = 0

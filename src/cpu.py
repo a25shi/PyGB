@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 from registers import Registers
 from disassemble import Decoder
 from opcodes import Instruction, Operand
@@ -1368,21 +1369,16 @@ class CPU:
                 self.setInterrupt(4)
 
     def update(self):
-        c_cycles = 0
         # blargg debug
         # self.blargg_update()
 
         # handle events
         self.handleEvents()
-
         # execute
         if not self.halt:
             cycles = self.executeNextOp()
         else:
             cycles = 4
-
-        # self.registers.print()
-        c_cycles += cycles
 
         # tick timer
         timer_inter = self.timer.tick(cycles - self.sync_cycles)

@@ -3,6 +3,7 @@ cmake-build-debug/
 .idea/
 /cmake-build-debug/CMakeFiles
 test roms/
+src/log.txt
 # Cython
 /src/**/*c
 /src/build/

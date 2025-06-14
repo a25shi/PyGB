@@ -56,7 +56,7 @@ cdef class CPU:
     cdef uint8_t execute(self, object, bint)
     cpdef void run(self)
     cdef void generateLog(self, object)
-    @cython.locals(c_cycles=int)
+    @cython.locals(timer_inter=bint, cycles=uint8_t)
     cdef void update(self)
     @cython.locals(address=uint16_t, wrapper=object, next_address=uint16_t, instruction=object, cb=bint, cycles=uint8_t)
     cdef uint8_t executeNextOp(self)
