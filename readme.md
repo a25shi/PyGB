@@ -22,3 +22,5 @@ Written using Python3, utilizing Cython for performance and PyGame for rendering
 > Make sure that the rom is placed in the correct path relative to the PyGB/src folder
 
 
+### PyGB Gameplay
+![pygb mario](https://github.com/user-attachments/assets/4efb7c55-0914-4294-9204-58a632b38119)
