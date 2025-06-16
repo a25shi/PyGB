@@ -36,6 +36,8 @@ class CPU:
         self.halt = False
         self.sync_cycles = 0
         self.cycles = 0
+        self.cputime = 0
+        self.screentime = 0
     def initVals(self):
         self.registers.__setitem__("AF", 0x01B0)
         self.registers.__setitem__("BC", 0x0013)
@@ -130,7 +132,6 @@ class CPU:
         val = self.registers["A"]
         res = self.registers[operand.name]
         self.registers["A"] = val | res
-
 
         # Flags
         self.registers.__setitem__("z", ((val | res) & 0xFF) == 0)
@@ -1282,7 +1283,12 @@ class CPU:
             # self.registers.print()
             # counter = 0
             self.update()
-            # counter += 1
+            counter += 1
+            #
+            if counter == 10000000:
+                print(f"self.cputime {self.cputime}")
+                print(f"self.screentime {self.screentime}")
+                counter = 0
     def generateLog(self, file):
         a = self.registers["A"]
         f = self.registers["F"]
@@ -1375,19 +1381,23 @@ class CPU:
         # handle events
         self.handleEvents()
         # execute
+        # start_time = time.perf_counter()
         if not self.halt:
             cycles = self.executeNextOp()
         else:
             cycles = 4
-
+        # end_time = time.perf_counter()
+        # self.cputime += end_time - start_time
         # tick timer
         timer_inter = self.timer.tick(cycles - self.sync_cycles)
         if timer_inter:
             self.setInterrupt(2)
 
+        # start_time = time.perf_counter()
         # update graphics
         self.screen.update(cycles - self.sync_cycles)
-
+        # end_time = time.perf_counter()
+        # self.screentime += end_time - start_time
         # reset sync
         self.sync_cycles = 0
         self.cycles = 0
@@ -1402,6 +1412,7 @@ class CPU:
             self.registers["PC"] += 1
 
         self.i_queue = False
+
 
     def executeNextOp(self):
         address = self.registers["PC"]

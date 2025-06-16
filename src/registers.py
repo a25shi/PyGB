@@ -1,7 +1,9 @@
 # Registers
 # cython: annotation_typing = False
-from collections.abc import MutableMapping
+# from collections.abc import MutableMapping
 from dataclasses import dataclass
+import cython
+
 
 # Constants
 REGISTERS_LOW = {"F": "AF", "C": "BC", "E": "DE", "L": "HL"}
@@ -10,23 +12,25 @@ REGISTERS = {"AF", "BC", "DE", "HL", "PC", "SP"}
 FLAGS = {"c": 4, "h": 5, "n": 6, "z": 7}
 
 @dataclass
-class Registers(MutableMapping):
-    AF: int
-    BC: int
-    DE: int
-    HL: int
-    PC: int
-    SP: int
+@cython.cclass
+class Registers:
+    AF: cython.int
+    BC: cython.int
+    DE: cython.int
+    HL: cython.int
+    PC: cython.int
+    SP: cython.int
 
-    def values(self):
-        return [self.AF, self.BC, self.DE, self.HL, self.PC, self.SP]
+    # def values(self):
+    #     return [self.AF, self.BC, self.DE, self.HL, self.PC, self.SP]
+    #
+    # def __iter__(self):
+    #     return iter(self.values())
+    #
+    # def __len__(self):
+    #     return len(self.values())
 
-    def __iter__(self):
-        return iter(self.values())
-
-    def __len__(self):
-        return len(self.values())
-
+    @cython.cfunc
     def print(self):
         print(
             f"AF: {hex(self.AF)} BC: {hex(self.BC)} DE: {hex(self.DE)} HL: {hex(self.HL)} PC: {hex(self.PC)} SP: {hex(self.SP)}")
